@@ -252,7 +252,7 @@ tools:
           descriptions:
             zh: 应用到图像的编辑指令。
       required: [code, prompt]
-    required_config: [image_base_url, image_model]
+    required_config: [image_base_url, image_edit_model]
 
 config:
   - name: vlm_model
@@ -277,9 +277,16 @@ config:
     scope: global
     default: ''
   - name: image_model
-    description: Image model ref (provider_id/model_id) used by image-generate/image-edit.
+    description: Image model ref (provider_id/model_id) used by image-generate.
     descriptions:
-      zh: "image-generate/image-edit 使用的图像模型引用（provider_id/model_id）。"
+      zh: "image-generate 使用的图像生成模型引用（provider_id/model_id）。"
+    type: string
+    scope: global
+    default: ''
+  - name: image_edit_model
+    description: Image model ref (provider_id/model_id) used by image-edit.
+    descriptions:
+      zh: "image-edit 使用的图像编辑模型引用（provider_id/model_id）。"
     type: string
     scope: global
     default: ''
