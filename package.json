@@ -22,6 +22,7 @@
   "dependencies": {
     "@abc-protocol/sdk": "github:abcp-sdk/abc-protocol-typescript#b7ff446f853a33c5a786f294d5e370e5e495f4f4",
     "@ai-sdk/openai-compatible": "^3.0.34",
+    "@types/turndown": "^5.0.5",
     "ai": "^7.0.73",
     "htmlparser2": "^10.0.0",
     "turndown": "^7.2.0",

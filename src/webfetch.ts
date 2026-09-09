@@ -6,18 +6,8 @@
  */
 
 import { parseDocument } from 'htmlparser2'
-import type { ToolSpec } from '@abc-protocol/sdk'
-
-// Minimal ambient type for turndown (CJS) so this git dependency, consumed as
-// TS source by the agent, needs no @types/turndown.
-declare module 'turndown' {
-  interface TurndownInstance {
-    remove: (f: string | string[]) => TurndownInstance
-    turndown: (html: string) => string
-  }
-  function turndownFactory(options?: Record<string, unknown>): TurndownInstance
-}
 import TurndownService from 'turndown'
+import type { ToolSpec } from '@abc-protocol/sdk'
 
 export const WEB_FETCH_MAX_BYTES = 5 * 1024 * 1024
 export const WEB_FETCH_DEFAULT_TIMEOUT_SECONDS = 30
