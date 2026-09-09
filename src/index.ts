@@ -6,10 +6,10 @@
  * agent localizes tool descriptions/schemas via `pickDescription`/`localizeSchema`.
  */
 
-import { readFileSync } from 'node:fs'
 import { parseManifest, manifestConfig } from '@abc-protocol/sdk'
 import type { ExtensionConfig, ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
+import manifestYaml from '../manifest.yaml'
 import { webFetchExecute } from './webfetch.js'
 import { braveSearchExecute } from './brave-search.js'
 import { imageGenExecutes } from './image.js'
@@ -19,9 +19,7 @@ export * from './deps.js'
 export * from './serve.js'
 export type { BundledDeps }
 
-const manifest = parseManifest(
-  readFileSync(new URL('../manifest.yaml', import.meta.url), 'utf8'),
-)
+const manifest = parseManifest(manifestYaml)
 
 /**
  * Build the bundled extension's protocol config. A single `ExtensionConfig`
