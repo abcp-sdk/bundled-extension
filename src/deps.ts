@@ -23,3 +23,8 @@ export interface BundledDeps {
   /** Read a stored file blob (meta + bytes) by `file:<code>`. */
   blobGet: (code: string) => Promise<{ meta: Record<string, unknown>; data: Uint8Array }>
 }
+
+/** Narrow a `Record<string, unknown>` blob meta into a string map (structural). */
+export function metaToObj(meta: Record<string, unknown>): Record<string, unknown> {
+  return { ...meta }
+}

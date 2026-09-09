@@ -1,5 +1,4 @@
-import { Extension } from '@abc-protocol/sdk'
-import type { Bus as AbcBus } from '@abc-protocol/sdk'
+import { Extension, type Bus as AbcBus } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
 import { createBundledConfig } from './index.js'
 
