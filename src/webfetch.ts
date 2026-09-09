@@ -5,9 +5,20 @@
  * standalone/bundled deployments get the same fetch semantics.
  */
 
+import { createRequire } from 'node:module'
 import { parseDocument } from 'htmlparser2'
-import TurndownService from 'turndown'
 import type { ToolSpec } from '@abc-protocol/sdk'
+
+// turndown ships CJS; load via createRequire + a minimal local type so this
+// git dependency (consumed as TS source by the agent) needs no ambient types
+// from @types/turndown.
+const require = createRequire(import.meta.url)
+interface TurndownInstance {
+  remove: (f: string | string[]) => TurndownInstance
+  turndown: (html: string) => string
+}
+type TurndownCtor = new (options?: Record<string, unknown>) => TurndownInstance
+const TurndownService = require('turndown') as TurndownCtor
 
 export const WEB_FETCH_MAX_BYTES = 5 * 1024 * 1024
 export const WEB_FETCH_DEFAULT_TIMEOUT_SECONDS = 30
