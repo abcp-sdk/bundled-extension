@@ -12,7 +12,8 @@
     }
   },
   "files": [
-    "src"
+    "src",
+    "manifest.yaml"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
