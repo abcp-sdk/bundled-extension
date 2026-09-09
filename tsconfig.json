@@ -14,8 +14,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["node"],
-    "typeRoots": ["node", "types"]
+    "types": ["node"]
   },
-  "include": ["src", "types"]
+  "include": ["src"]
 }
