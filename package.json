@@ -1,0 +1,36 @@
+{
+  "name": "@abc-protocol/bundled-extension",
+  "version": "0.1.0",
+  "description": "Bundled extension server: memory/history tools + web-fetch/brave-search + image generate/edit, served in-process over the abc protocol.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@abc-protocol/sdk": "github:abcp-sdk/abc-protocol-typescript#b7ff446f853a33c5a786f294d5e370e5e495f4f4",
+    "@ai-sdk/openai-compatible": "^3.0.34",
+    "ai": "^7.0.73",
+    "htmlparser2": "^10.0.0",
+    "turndown": "^7.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/turndown": "^5.0.5",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
