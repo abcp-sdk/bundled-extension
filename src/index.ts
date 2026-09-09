@@ -1,9 +1,9 @@
 /**
- * Bundled extension: tools declared in manifest.yaml (with zh/en
- * `descriptions`), handlers (execute) implemented per-module. We use the SDK's
- * `parseManifest` + `manifestConfig`, so the wire manifest carries the
- * localized `descriptions` and property-level descriptions verbatim — the
- * agent localizes tool descriptions/schemas via `pickDescription`/`localizeSchema`.
+ * Bundled extension: tools + config declared in manifest.yaml (with zh/en
+ * `descriptions`), handlers (execute) implemented per-module. The SDK's
+ * parseManifest/manifestConfig (fixed in v1.0.8) keeps the tool-level and
+ * config-level `descriptions` maps, so the wire manifest carries them and the
+ * agent localizes via `pickDescription`/`localizeSchema`.
  */
 
 import { parseManifest, manifestConfig } from '@abc-protocol/sdk'
@@ -32,7 +32,9 @@ export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
     ...memoryExecutes(deps),
     'web-fetch': { execute: webFetchExecute },
     'brave-search': { execute: braveSearchExecute(deps) },
-    ...imageGenExecutes(deps),
+    ...Object.fromEntries(
+      Object.entries(imageGenExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
+    ),
   }
   return manifestConfig(manifest, { handlers })
 }
