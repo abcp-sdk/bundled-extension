@@ -1,14 +1,27 @@
-import type { ExtensionConfig } from '@abc-protocol/sdk'
+/**
+ * Bundled extension: tools declared in manifest.yaml (with zh/en
+ * `descriptions`), handlers (execute) implemented per-module. We use the SDK's
+ * `parseManifest` + `manifestConfig`, so the wire manifest carries the
+ * localized `descriptions` and property-level descriptions verbatim — the
+ * agent localizes tool descriptions/schemas via `pickDescription`/`localizeSchema`.
+ */
+
+import { readFileSync } from 'node:fs'
+import { parseManifest, manifestConfig } from '@abc-protocol/sdk'
+import type { ExtensionConfig, ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
-import { memoryTools } from './memory.js'
-import { webFetchTool } from './webfetch.js'
-import { braveSearchTool } from './brave-search.js'
-import { imageGenTool } from './image.js'
-import { configSpec } from './config-spec.js'
+import { webFetchExecute } from './webfetch.js'
+import { braveSearchExecute } from './brave-search.js'
+import { imageGenExecutes } from './image.js'
+import { memoryExecutes } from './memory.js'
 
 export * from './deps.js'
 export * from './serve.js'
 export type { BundledDeps }
+
+const manifest = parseManifest(
+  readFileSync(new URL('../manifest.yaml', import.meta.url), 'utf8'),
+)
 
 /**
  * Build the bundled extension's protocol config. A single `ExtensionConfig`
@@ -17,16 +30,11 @@ export type { BundledDeps }
  * agent source (it is a standalone lib that can also be served in-process).
  */
 export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
-  const tools = {
-    ...memoryTools(deps),
-    ...webFetchTool(),
-    ...braveSearchTool(deps),
-    ...imageGenTool(deps),
+  const handlers: Record<string, { execute: ToolSpec['execute'] }> = {
+    ...memoryExecutes(deps),
+    'web-fetch': { execute: webFetchExecute },
+    'brave-search': { execute: braveSearchExecute(deps) },
+    ...imageGenExecutes(deps),
   }
-  return {
-    id: 'bundled',
-    version: '0.1.0',
-    tools,
-    config: configSpec(),
-  }
+  return manifestConfig(manifest, { handlers })
 }

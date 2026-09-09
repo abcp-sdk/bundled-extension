@@ -1,8 +1,9 @@
 /**
- * Memory / history / file / vision tools, ported from the Go memory-extension
- * but backed by the agent's sqlite DB + injected blob store + LLM registry
- * (no Postgres, no self-hosted HTTP). Tool names follow the snake->dash
- * convention: `todo-write` (was todowrite).
+ * Memory / history / file / vision tool handlers, ported from the Go
+ * memory-extension but backed by the agent's sqlite DB + injected blob store +
+ * LLM registry (no Postgres, no self-hosted HTTP). Tool descriptions/schemas
+ * are declared in manifest.yaml (with `descriptions.zh`); this module exposes
+ * the execute handlers only.
  */
 
 import type { ToolSpec } from '@abc-protocol/sdk'
@@ -26,11 +27,7 @@ function numArg(m: Record<string, unknown>, k: string, def: number): number {
   return def
 }
 
-function fmt(locale: string, en: string, zh: string): string {
-  return locale.startsWith('zh') ? zh : en
-}
-
-/** The memory extension's `todos` table, created idempotently in the agent DB. */
+/** The bundled extension's `todos` table, created idempotently in the agent DB. */
 const TODOS_DDL = `
 CREATE TABLE IF NOT EXISTS bundled_todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +40,8 @@ CREATE TABLE IF NOT EXISTS bundled_todos (
 CREATE INDEX IF NOT EXISTS idx_bundled_todos_session ON bundled_todos (session_id);
 `
 
-export function memoryTools(deps: BundledDeps): Record<string, ToolSpec> {
+/** Build the memory/history/file/vision execute handlers bound to [deps]. */
+export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['execute']> {
   // Ensure the todos table exists (idempotent) at tool-set construction time.
   void deps.rawRun(TODOS_DDL).catch(() => {})
 
@@ -60,21 +58,6 @@ export function memoryTools(deps: BundledDeps): Record<string, ToolSpec> {
     }
     return todos.length
   }
-
-  const listTodos = async (sid: string): Promise<TodoRow[]> => {
-    const rows = await deps.rawAll(
-      `SELECT content, status, priority, created_unix FROM bundled_todos WHERE session_id = ? ORDER BY id`,
-      [sid],
-    )
-    return rows.map(r => ({
-      content: String(r['content'] ?? ''),
-      status: String(r['status'] ?? 'pending'),
-      priority: String(r['priority'] ?? 'medium'),
-      created_unix: Number(r['created_unix'] ?? 0),
-    }))
-  }
-
-  // ---- session chain (reuse agent sqlite: messages.tip_id / prev_id) ----
 
   const sessionTip = async (sid: string): Promise<string> => {
     const rows = await deps.rawAll(`SELECT tip_id FROM sessions WHERE name = ?`, [sid])
@@ -221,8 +204,6 @@ export function memoryTools(deps: BundledDeps): Record<string, ToolSpec> {
     return res.meta
   }
 
-  // ---- file / image handlers ----
-
   const vlmRead = async (prompt: string, imageDataUrl: string): Promise<string> => {
     const modelId = String(await deps.resolveConfig('vlm_model') ?? '')
     if (modelId === '') throw new Error('vlm_model not configured: set a vision model first')
@@ -271,153 +252,84 @@ export function memoryTools(deps: BundledDeps): Record<string, ToolSpec> {
   }
 
   return {
-    'todo-write': {
-      description: "Replace the session's todo list (stored in the database, not a file).",
-      descriptions: {
-        zh: '替换会话的待办列表（存于数据库，而非文件）。',
-      },
-      inputSchema: {
-        type: 'object',
-        properties: {
-          todos: {
-            type: 'array',
-            description: 'The full todo list to replace the session current one.',
-            items: {
-              type: 'object',
-              properties: {
-                content: { type: 'string', description: 'Todo item text.' },
-                status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'cancelled'], description: 'Todo status.' },
-                priority: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Todo priority.' },
-              },
-              required: ['content', 'status', 'priority'],
-            },
-          },
-        },
-        required: ['todos'],
-      },
-      execute: async (args, _callId, sessionName) => {
-        if (!sessionName) toolError('missing session context (session_name)')
-        const todos = Array.isArray(args['todos'])
-          ? (args['todos'] as Record<string, unknown>[])
-          : []
-        const n = await writeTodos(sessionName, todos)
-        return { content: `Updated ${n} todo(s).`, data: { count: n } }
-      },
+    'todo-write': async (args, _callId, sessionName) => {
+      if (!sessionName) toolError('missing session context (session_name)')
+      const todos = Array.isArray(args['todos'])
+        ? (args['todos'] as Record<string, unknown>[])
+        : []
+      const n = await writeTodos(sessionName, todos)
+      return { content: `Updated ${n} todo(s).`, data: { count: n } }
     },
-    'history-search': {
-      description: "Search this session's chat history by keyword (case-insensitive substring over parts(type=text) text, tool names and change ids), optionally constrained to a time range [from, to] (YYYY-MM-DD HH:MM:SS). Returns messages newest-first with their role, depth (0 = newest), tool name and workspace change id.",
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Case-insensitive keyword matched against message text, tool names and change ids.' },
-          from: { type: 'string', description: 'Inclusive lower time bound (YYYY-MM-DD HH:MM:SS).' },
-          to: { type: 'string', description: 'Inclusive upper time bound (YYYY-MM-DD HH:MM:SS).' },
-          limit: { type: 'integer', description: 'Maximum number of messages to return (default 50).' },
-        },
-        required: ['query'],
-      },
-      execute: async (args, _callId, sessionName) => {
-        if (!sessionName) toolError('missing session context (session_name)')
-        const query = strArg(args, 'query')
-        const from = strArg(args, 'from')
-        const to = strArg(args, 'to')
-        const limit = numArg(args, 'limit', 50)
-        const entries = await buildHistoryEntries(sessionName, query, limit)
-        const filtered = entries.filter(e => {
-          if (from !== '' && String(e['created_at']) < from) return false
-          if (to !== '' && String(e['created_at']) > to) return false
-          return true
-        })
-        const locale = String(await deps.resolveConfig('agent.locale') ?? 'en')
-        const content = renderHistoryList(locale, filtered)
-        return { content, data: { count: filtered.length, entries } }
-      },
+    'history-search': async (args, _callId, sessionName) => {
+      if (!sessionName) toolError('missing session context (session_name)')
+      const query = strArg(args, 'query')
+      const from = strArg(args, 'from')
+      const to = strArg(args, 'to')
+      const limit = numArg(args, 'limit', 50)
+      const entries = await buildHistoryEntries(sessionName, query, limit)
+      const filtered = entries.filter(e => {
+        if (from !== '' && String(e['created_at']) < from) return false
+        if (to !== '' && String(e['created_at']) > to) return false
+        return true
+      })
+      const locale = String(await deps.resolveConfig('agent.locale') ?? 'en')
+      const content = renderHistoryList(locale, filtered)
+      return { content, data: { count: filtered.length, entries } }
     },
-    'history-range': {
-      description: "Read this session's chat history by position (depth) window. depth 0 = the newest message; positive numbers go back in time; negative numbers count from the newest side (-1 = newest). Returns [depth_from, depth_to) oldest-first with role, content, tool name and change id.",
-      inputSchema: {
-        type: 'object',
-        properties: {
-          from: { type: 'integer', description: 'Starting depth offset (0 = newest message).' },
-          to: { type: 'integer', description: 'Exclusive depth bound.' },
-          limit: { type: 'integer', description: 'Maximum number of messages to return (default 200).' },
-        },
-      },
-      execute: async (args, _callId, sessionName) => {
-        if (!sessionName) toolError('missing session context (session_name)')
-        const from = numArg(args, 'from', 0)
-        const to = numArg(args, 'to', 0)
-        const limit = numArg(args, 'limit', 200)
-        const chain = await chainRaw(await sessionTip(sessionName), limit)
-        const total = chain.length
-        const norm = (d: number): number => (d < 0 ? total + d : d)
-        let f = norm(from)
-        let t = norm(to)
-        if (f < 0) f = 0
-        if (t > total) t = total
-        if (f >= t) return { content: 'history_range: empty.', data: { count: 0 } }
-        const ids = chain.map(c => c.id)
-        const textByMsg = await textPartsForMessages(ids, '')
-        const toolByMsg = await partsForMessages(ids)
-        const entries = chain.slice(f, t).map(r => {
-          let toolName = ''
-          let changeID = ''
-          const parts = toolByMsg.get(r.id)
-          if (parts) {
-            for (const p of parts) {
-              if (toolName === '') toolName = p.name
-              if (changeID === '') changeID = p.changeID
-            }
+    'history-range': async (args, _callId, sessionName) => {
+      if (!sessionName) toolError('missing session context (session_name)')
+      const from = numArg(args, 'from', 0)
+      const to = numArg(args, 'to', 0)
+      const limit = numArg(args, 'limit', 200)
+      const chain = await chainRaw(await sessionTip(sessionName), limit)
+      const total = chain.length
+      const norm = (d: number): number => (d < 0 ? total + d : d)
+      let f = norm(from)
+      let t = norm(to)
+      if (f < 0) f = 0
+      if (t > total) t = total
+      if (f >= t) return { content: 'history_range: empty.', data: { count: 0 } }
+      const ids = chain.map(c => c.id)
+      const textByMsg = await textPartsForMessages(ids, '')
+      const toolByMsg = await partsForMessages(ids)
+      const entries = chain.slice(f, t).map(r => {
+        let toolName = ''
+        let changeID = ''
+        const parts = toolByMsg.get(r.id)
+        if (parts) {
+          for (const p of parts) {
+            if (toolName === '') toolName = p.name
+            if (changeID === '') changeID = p.changeID
           }
-          return {
-            session: sessionName,
-            role: r.role,
-            content: textByMsg.get(r.id) ?? '',
-            tool_name: toolName,
-            change_id: changeID,
-            created_at: r.created,
-            depth: r.depth,
-          }
-        })
-        const locale = String(await deps.resolveConfig('agent.locale') ?? 'en')
-        const content = renderHistoryList(locale, entries)
-        return { content, data: { count: entries.length, entries } }
-      },
+        }
+        return {
+          session: sessionName,
+          role: r.role,
+          content: textByMsg.get(r.id) ?? '',
+          tool_name: toolName,
+          change_id: changeID,
+          created_at: r.created,
+          depth: r.depth,
+        }
+      })
+      const locale = String(await deps.resolveConfig('agent.locale') ?? 'en')
+      const content = renderHistoryList(locale, entries)
+      return { content, data: { count: entries.length, entries } }
     },
-    'file-info': {
-      description: 'Return metadata (name, mime type, size, sha256) for a previously uploaded file referenced as file:<code>. Use this first to learn a file type and size before deciding to read or analyze it.',
-      inputSchema: {
-        type: 'object',
-        properties: { code: { type: 'string', description: 'The file code (the 16-char segment after file:)' } },
-        required: ['code'],
-      },
-      execute: async (args, _callId, sessionName) => {
-        const code = strArg(args, 'code')
-        if (code === '') toolError('code is required')
-        const meta = await fileMetaFromBlob(code)
-        const content = `File ${code}: ${String(meta['name'] ?? '')} (${String(meta['mime'] ?? '')}, ${Number(meta['size'] ?? 0)} bytes, sha256=${String(meta['sha256'] ?? '')})`
-        return { content, data: { meta } }
-      },
+    'file-info': async (args, _callId, _sessionName) => {
+      const code = strArg(args, 'code')
+      if (code === '') toolError('code is required')
+      const meta = await fileMetaFromBlob(code)
+      const content = `File ${code}: ${String(meta['name'] ?? '')} (${String(meta['mime'] ?? '')}, ${Number(meta['size'] ?? 0)} bytes, sha256=${String(meta['sha256'] ?? '')})`
+      return { content, data: { meta } }
     },
-    'image-read': {
-      description: 'Understand a previously uploaded image referenced as file:<code> using a vision model. Pass a question (prompt); the model returns a natural-language description/answer about the image.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          code: { type: 'string', description: 'The file code (the 16-char segment after file:)' },
-          prompt: { type: 'string', description: 'Question about the image (default: describe it in detail).' },
-        },
-        required: ['code'],
-      },
-      requiredConfig: ['vlm_model'],
-      execute: async (args, _callId, sessionName) => {
-        const code = strArg(args, 'code')
-        if (code === '') toolError('code is required')
-        let prompt = strArg(args, 'prompt')
-        if (prompt === '') prompt = 'Describe this image in detail.'
-        const res = await imageRead(code, prompt, sessionName)
-        return { content: res.content, data: res.data }
-      },
+    'image-read': async (args, _callId, sessionName) => {
+      const code = strArg(args, 'code')
+      if (code === '') toolError('code is required')
+      let prompt = strArg(args, 'prompt')
+      if (prompt === '') prompt = 'Describe this image in detail.'
+      const res = await imageRead(code, prompt, sessionName)
+      return { content: res.content, data: res.data }
     },
   }
 }

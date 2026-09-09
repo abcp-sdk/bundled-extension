@@ -1,8 +1,8 @@
 /**
- * brave-search tool: web search against the Brave Search API. Algorithm
- * ported from opencode's `websearch` (Exa/Parallel MCP → Brave REST here) with
- * the same validation / timeout / no-results semantics, but a single provider
- * (Brave) driven by `BRAVE_API_KEY` config.
+ * brave-search tool handler. Description/schema declared in manifest.yaml
+ * (with `descriptions.zh`); this module exposes the execute handler only.
+ * Algorithm ported from opencode's `websearch` (Brave REST here) with the
+ * same validation / timeout / no-results semantics.
  */
 
 import type { ToolSpec } from '@abc-protocol/sdk'
@@ -34,7 +34,6 @@ function assertApiKey(apiKey: string): void {
   }
 }
 
-/** Render results into the model-visible content (mirror opencode shape). */
 function renderResults(query: string, results: BraveWebResult[], count: number): string {
   if (!results || results.length === 0) return BRAVE_NO_RESULTS
   const lines: string[] = []
@@ -67,7 +66,6 @@ async function callBrave(apiKey: string, query: string, count: number): Promise<
       throw new Error(`Response too large (exceeds ${BRAVE_MAX_BYTES} bytes)`)
     }
     if (!res.ok) {
-      // Brave returns 4xx/5xx w/ a JSON error payload.
       let msg = ''
       try {
         const j = JSON.parse(buf.toString('utf8')) as { message?: string; error?: string }
@@ -87,38 +85,16 @@ async function callBrave(apiKey: string, query: string, count: number): Promise<
   }
 }
 
-export function braveSearchTool(deps: BundledDeps): Record<string, ToolSpec> {
-  return {
-    'brave-search': {
-      description: `Search the web using the session's Brave Search provider. Use this for current information beyond knowledge cutoff.
-
-This is a provider-independent local tool backed by the Brave Search API. The current year is ${new Date().getFullYear()}. Use this year when searching for recent information or current events.`,
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Web search query' },
-          count: {
-            type: 'integer',
-            minimum: 1,
-            maximum: BRAVE_MAX_RESULTS,
-            description: `Number of search results to return (default: 8, maximum: ${BRAVE_MAX_RESULTS})`,
-          },
-        },
-        required: ['query'],
-      },
-      requiredConfig: ['brave_api_key'],
-      execute: async (args, _callId, sessionName) => {
-        const query = String(args['query'] ?? '')
-        if (query.trim() === '') throw new Error('query is required')
-        let count = Number(args['count'] ?? 8)
-        if (!Number.isInteger(count) || count < 1) count = 8
-        if (count > BRAVE_MAX_RESULTS) count = BRAVE_MAX_RESULTS
-        const apiKey = String(
-          await deps.resolveConfig('brave_api_key', sessionName) ?? '',
-        )
-        const text = await callBrave(apiKey, query, count)
-        return { content: text, data: { provider: 'brave', query } }
-      },
-    },
+/** brave-search execute handler (description/schema from manifest.yaml). */
+export function braveSearchExecute(deps: BundledDeps): ToolSpec['execute'] {
+  return async (args, _callId, sessionName) => {
+    const query = String(args['query'] ?? '')
+    if (query.trim() === '') throw new Error('query is required')
+    let count = Number(args['count'] ?? 8)
+    if (!Number.isInteger(count) || count < 1) count = 8
+    if (count > BRAVE_MAX_RESULTS) count = BRAVE_MAX_RESULTS
+    const apiKey = String(await deps.resolveConfig('brave_api_key', sessionName) ?? '')
+    const text = await callBrave(apiKey, query, count)
+    return { content: text, data: { provider: 'brave', query } }
   }
 }

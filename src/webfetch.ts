@@ -1,8 +1,8 @@
 /**
- * web-fetch tool: fetch an HTTP(S) URL and return it as text, markdown or
- * HTML. Algorithm ported from opencode's `webfetch` (no effect/permission
- * framework — a plain fetch + htmlparser2 + turndown), used verbatim here so
- * standalone/bundled deployments get the same fetch semantics.
+ * web-fetch tool handler. The tool's description/input_schema are declared in
+ * manifest.yaml (with `descriptions.zh`); this module exposes the execute
+ * handler only. Algorithm ported from opencode's `webfetch` (a plain fetch +
+ * htmlparser2 + turndown).
  */
 
 import { parseDocument } from 'htmlparser2'
@@ -17,27 +17,6 @@ export const WEB_FETCH_USER_AGENT =
 
 type Format = 'markdown' | 'text' | 'html'
 
-const inputSchema = {
-  type: 'object',
-  properties: {
-    url: { type: 'string', description: 'The HTTP or HTTPS URL to fetch content from' },
-    format: {
-      type: 'string',
-      enum: ['text', 'markdown', 'html'],
-      description: 'The format to return the content in. Defaults to markdown.',
-    },
-    timeout: {
-      type: 'number',
-      description: `Optional timeout in seconds (maximum: ${WEB_FETCH_MAX_TIMEOUT_SECONDS})`,
-    },
-  },
-  required: ['url'],
-} as const
-
-const description = `Fetch content from an HTTP or HTTPS URL and return it as text, markdown, or HTML. Markdown is the default.
-
-Use a more targeted tool when one is available. This tool is read-only. Large text results may be replaced with a preview while the complete output is retained in managed storage.`
-
 const acceptHeader = (format: Format) => {
   switch (format) {
     case 'markdown':
@@ -49,9 +28,6 @@ const acceptHeader = (format: Format) => {
   }
   return '*/*'
 }
-
-const isCloudflareChallenge = (status: number, headers: Headers): boolean =>
-  status === 403 && (headers.get('cf-mitigated') === 'challenge' || headers.get('cf-mitigated') === 'block')
 
 const mimeFrom = (contentType: string): string =>
   contentType.split(';', 1)[0]?.trim().toLowerCase() ?? ''
@@ -112,8 +88,6 @@ const convert = (content: string, contentType: string, format: Format): string =
   return content
 }
 
-// ---- tool ----
-
 /** Fetch a single byte stream (bounded) then decode per format. */
 async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number): Promise<{ url: string; contentType: string; format: Format; output: string }> {
   const url = new URL(rawUrl)
@@ -154,17 +128,14 @@ async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number):
   }
 
   let fetched: { contentType: string; buf: Buffer }
-  let first: unknown
   try {
     fetched = await doFetch(WEB_FETCH_USER_AGENT)
   } catch (e) {
-    // Cloudflare challenge backoff: retry with the plain "opencode" UA.
     if (e && typeof e === 'object' && 'type' in e && (e as { type: string }).type === 'aborted') throw e
-    first = e
     try {
       fetched = await doFetch('opencode')
     } catch (e2) {
-      throw (first as Error) ?? (e2 as Error)
+      throw (e as Error) ?? (e2 as Error)
     }
   }
   const content = fetched.buf.toString('utf8')
@@ -172,19 +143,12 @@ async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number):
   return { url: rawUrl, contentType: fetched.contentType, format, output }
 }
 
-export function webFetchTool(): Record<string, ToolSpec> {
-  return {
-    'web-fetch': {
-      description,
-      inputSchema,
-      execute: async (args) => {
-        const rawUrl = String(args['url'] ?? '')
-        if (rawUrl === '') throw new Error('url is required')
-        const format = (args['format'] as Format) ?? 'markdown'
-        const timeout = Number(args['timeout'] ?? 0)
-        const out = await fetchUrl(rawUrl, format, timeout)
-        return { content: out.output, data: { url: out.url, contentType: out.contentType, format: out.format } }
-      },
-    },
-  }
+/** web-fetch execute handler (description/schema from manifest.yaml). */
+export const webFetchExecute: ToolSpec['execute'] = async (args) => {
+  const rawUrl = String(args['url'] ?? '')
+  if (rawUrl === '') throw new Error('url is required')
+  const format = (args['format'] as Format) ?? 'markdown'
+  const timeout = Number(args['timeout'] ?? 0)
+  const out = await fetchUrl(rawUrl, format, timeout)
+  return { content: out.output, data: { url: out.url, contentType: out.contentType, format: out.format } }
 }
