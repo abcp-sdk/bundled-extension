@@ -29,7 +29,9 @@ const manifest = parseManifest(manifestYaml)
  */
 export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
   const handlers: Record<string, { execute: ToolSpec['execute'] }> = {
-    ...memoryExecutes(deps),
+    ...Object.fromEntries(
+      Object.entries(memoryExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
+    ),
     'web-fetch': { execute: webFetchExecute },
     'brave-search': { execute: braveSearchExecute(deps) },
     ...Object.fromEntries(
