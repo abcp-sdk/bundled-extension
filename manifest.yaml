@@ -148,14 +148,16 @@ tools:
   - name: audio-transcribe
     description: >-
       Transcribe a previously uploaded audio file referenced as file:<code> to
-      text, using the configured ASR endpoint (config `asr_base_url` serving an
-      OpenAI-compatible /audio/transcriptions API, e.g. the easylab gateway's
-      qwen3-asr). Pass an optional language hint (ISO 639-1, e.g. zh / en).
+      text, using the configured transcription model (config `asr_model`, a
+      provider_id/model_id registered on the agent with
+      capability=transcription, e.g. the easylab gateway's qwen3-asr). Pass an
+      optional language hint (ISO 639-1, e.g. zh / en).
     descriptions:
       zh: >-
-        将以 file:<code> 引用的已上传音频文件转写为文字，使用配置的 ASR 端点（配置
-        asr_base_url，提供 OpenAI 兼容的 /audio/transcriptions 接口，如 easylab 网关的
-        qwen3-asr）。可选传语言提示（ISO 639-1，如 zh / en）。
+        将以 file:<code> 引用的已上传音频文件转写为文字，使用已配置的转写模型（配置
+        asr_model，为 agent 上注册的 capability=transcription 的
+        provider_id/model_id，如 easylab 网关的 qwen3-asr）。可选传语言提示
+        （ISO 639-1，如 zh / en）。
     input_schema:
       type: object
       properties:
@@ -170,7 +172,7 @@ tools:
           descriptions:
             zh: "可选语言提示（ISO 639-1，如 zh、en）。留空自动检测。"
       required: [code]
-    required_config: [asr_base_url]
+    required_config: [asr_model]
 
   # ---- web-fetch ----
   - name: web-fetch
@@ -350,26 +352,16 @@ tools:
     required_config: [tts_model]
 
 config:
-  - name: asr_base_url
-    description: >-
-      Base URL of an OpenAI-compatible ASR endpoint (…/v1, serving
-      POST /audio/transcriptions), e.g. the easylab gateway.
-    descriptions:
-      zh: "OpenAI 兼容 ASR 端点的基础地址（…/v1，提供 POST /audio/transcriptions），如 easylab 网关。"
-    type: string
-    scope: global
-    default: ''
   - name: asr_model
-    description: "ASR model id (default qwen3-asr)."
+    description: >-
+      Transcription model ref (provider_id/model_id, capability=transcription)
+      used by audio-transcribe. Register the model on the agent first (e.g.
+      the easylab gateway's qwen3-asr via an openai provider).
     descriptions:
-      zh: "ASR 模型 id（默认 qwen3-asr）。"
-    type: string
-    scope: global
-    default: ''
-  - name: asr_api_key
-    description: "Optional bearer token for the ASR endpoint (EMPTY when the gateway needs no key)."
-    descriptions:
-      zh: "ASR 端点的可选 Bearer 令牌（网关无需密钥时填 EMPTY）。"
+      zh: >-
+        audio-transcribe 使用的转写模型引用（provider_id/model_id，
+        capability=transcription）。请先在 agent 上注册该模型（如通过 openai
+        provider 注册 easylab 网关的 qwen3-asr）。
     type: string
     scope: global
     default: ''

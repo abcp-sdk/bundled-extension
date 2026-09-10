@@ -14,14 +14,15 @@ export interface BundledDeps {  /** Resolve a provider/model reference to an AI 
     error?: string
   }>
   /**
-   * Resolve a GENERATION model (image / video / speech) from the provider
-   * registry. `ref` is a canonical `provider_id/model_id`; the agent builds
-   * the capability-specific AI-SDK model (ImageModelV4 /
-   * Experimental_VideoModelV4 / SpeechModelV4) from the provider's
-   * credentials. Errors name the missing knob so the caller can surface it.
+   * Resolve a GENERATION model (image / video / speech / transcription) from
+   * the provider registry. `ref` is a canonical `provider_id/model_id`; the
+   * agent builds the capability-specific AI-SDK model (ImageModelV4 /
+   * Experimental_VideoModelV4 / SpeechModelV4 / TranscriptionModelV4) from
+   * the provider's credentials. Errors name the missing knob so the caller
+   * can surface it.
    */
   resolveGenerative: (
-    capability: 'image' | 'video' | 'speech',
+    capability: 'image' | 'video' | 'speech' | 'transcription',
     ref: string,
   ) => Promise<{
     isOk: () => boolean
