@@ -144,6 +144,34 @@ tools:
       required: [code]
     required_config: [vlm_model]
 
+  # ---- audio-transcribe (ASR) ----
+  - name: audio-transcribe
+    description: >-
+      Transcribe a previously uploaded audio file referenced as file:<code> to
+      text, using the configured ASR endpoint (config `asr_base_url` serving an
+      OpenAI-compatible /audio/transcriptions API, e.g. the easylab gateway's
+      qwen3-asr). Pass an optional language hint (ISO 639-1, e.g. zh / en).
+    descriptions:
+      zh: >-
+        将以 file:<code> 引用的已上传音频文件转写为文字，使用配置的 ASR 端点（配置
+        asr_base_url，提供 OpenAI 兼容的 /audio/transcriptions 接口，如 easylab 网关的
+        qwen3-asr）。可选传语言提示（ISO 639-1，如 zh / en）。
+    input_schema:
+      type: object
+      properties:
+        code:
+          type: string
+          description: "The file code (the 16-char segment after file:) of the audio file."
+          descriptions:
+            zh: "音频文件的文件编码（file: 之后的 16 字符部分）。"
+        language:
+          type: string
+          description: "Optional language hint (ISO 639-1, e.g. zh, en). Omit for auto."
+          descriptions:
+            zh: "可选语言提示（ISO 639-1，如 zh、en）。留空自动检测。"
+      required: [code]
+    required_config: [asr_base_url]
+
   # ---- web-fetch ----
   - name: web-fetch
     description: >-
@@ -322,6 +350,29 @@ tools:
     required_config: [tts_model]
 
 config:
+  - name: asr_base_url
+    description: >-
+      Base URL of an OpenAI-compatible ASR endpoint (…/v1, serving
+      POST /audio/transcriptions), e.g. the easylab gateway.
+    descriptions:
+      zh: "OpenAI 兼容 ASR 端点的基础地址（…/v1，提供 POST /audio/transcriptions），如 easylab 网关。"
+    type: string
+    scope: global
+    default: ''
+  - name: asr_model
+    description: "ASR model id (default qwen3-asr)."
+    descriptions:
+      zh: "ASR 模型 id（默认 qwen3-asr）。"
+    type: string
+    scope: global
+    default: ''
+  - name: asr_api_key
+    description: "Optional bearer token for the ASR endpoint (EMPTY when the gateway needs no key)."
+    descriptions:
+      zh: "ASR 端点的可选 Bearer 令牌（网关无需密钥时填 EMPTY）。"
+    type: string
+    scope: global
+    default: ''
   - name: vlm_model
     description: Vision model ref (provider_id/model_id) used by image-read.
     descriptions:

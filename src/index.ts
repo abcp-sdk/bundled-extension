@@ -13,10 +13,12 @@ import manifestYaml from '../manifest.yaml'
 import { webFetchExecute } from './webfetch.js'
 import { braveSearchExecute } from './brave-search.js'
 import { imageGenExecutes } from './image.js'
+import { audioTranscribeExecute } from './asr.js'
 import { memoryExecutes } from './memory.js'
 
 export * from './deps.js'
 export * from './serve.js'
+export * from './asr.js'
 export type { BundledDeps }
 
 const manifest = parseManifest(manifestYaml)
@@ -34,6 +36,7 @@ export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
     ),
     'web-fetch': { execute: webFetchExecute },
     'brave-search': { execute: braveSearchExecute(deps) },
+    'audio-transcribe': { execute: audioTranscribeExecute(deps) },
     ...Object.fromEntries(
       Object.entries(imageGenExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
     ),

@@ -6,8 +6,7 @@ import type { LanguageModel } from 'ai'
  * standalone lib: the agent server supplies these at boot. This lets the
  * agent either serve it in-process (bundle) or omit it entirely.
  */
-export interface BundledDeps {
-  /** Resolve a provider/model reference to an AI SDK LanguageModel. */
+export interface BundledDeps {  /** Resolve a provider/model reference to an AI SDK LanguageModel. */
   resolveModel: (db: unknown, modelId: string) => Promise<{
     isOk: () => boolean
     isErr: () => boolean
