@@ -208,9 +208,13 @@ tools:
   # ---- image-generate / image-edit ----
   - name: image-generate
     description: >-
-      Generate an image from a natural-language prompt using a configured vision image model.
+      Generate an image from a natural-language prompt using the configured image
+      model (config `image_model`, a provider_id/model_id registered on the agent
+      with capability=image). The result is stored and referenced as file:<code>.
     descriptions:
-      zh: 使用已配置的视觉图像模型，根据自然语言提示生成一张图像。
+      zh: >-
+        使用已配置的图像模型（配置 image_model，为 agent 上注册的 capability=image 的
+        provider_id/model_id）根据自然语言提示生成图像。结果会存储为 file:<code>。
     input_schema:
       type: object
       properties:
@@ -230,14 +234,19 @@ tools:
           descriptions:
             zh: 生成的图像数量（默认 1）。
       required: [prompt]
-    required_config: [image_base_url, image_model]
+    required_config: [image_model]
 
   - name: image-edit
     description: >-
-      Edit an image (referenced by file:<code>) using a vision image model, given a
-      natural-language instruction.
+      Edit an image (referenced by file:<code>) using the configured image-edit
+      model (config `image_edit_model`, a provider_id/model_id with
+      capability=image), given a natural-language instruction. The result is
+      stored and referenced as file:<code>.
     descriptions:
-      zh: "使用视觉图像模型编辑以 file:<code> 引用的图像，给定一条自然语言指令。"
+      zh: >-
+        使用已配置的图像编辑模型（配置 image_edit_model，capability=image 的
+        provider_id/model_id）编辑以 file:<code> 引用的图像，给定一条自然语言指令。
+        结果会存储为 file:<code>。
     input_schema:
       type: object
       properties:
@@ -252,7 +261,65 @@ tools:
           descriptions:
             zh: 应用到图像的编辑指令。
       required: [code, prompt]
-    required_config: [image_base_url, image_edit_model]
+    required_config: [image_edit_model]
+
+  - name: video-generate
+    description: >-
+      Generate a short video from a natural-language prompt using the configured
+      video model (config `video_model`, a provider_id/model_id registered on the
+      agent with capability=video, e.g. Google Veo). The result is stored and
+      referenced as file:<code>.
+    descriptions:
+      zh: >-
+        使用已配置的视频模型（配置 video_model，为 agent 上注册的 capability=video 的
+        provider_id/model_id，如 Google Veo）根据自然语言提示生成短视频。结果会存储为 file:<code>。
+    input_schema:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: The prompt that should be used to generate the video.
+          descriptions:
+            zh: 用于生成视频的提示词。
+        aspect_ratio:
+          type: string
+          enum: ['16:9', '9:16']
+          description: Aspect ratio of the video (default provider-specific).
+          descriptions:
+            zh: 视频宽高比（默认由提供商决定）。
+        resolution:
+          type: string
+          enum: ['720p', '1080p']
+          description: Resolution of the video.
+          descriptions:
+            zh: 视频分辨率。
+      required: [prompt]
+    required_config: [video_model]
+
+  - name: tts-generate
+    description: >-
+      Synthesize speech audio from text using the configured TTS model (config
+      `tts_model`, a provider_id/model_id registered on the agent with
+      capability=speech). The result is stored and referenced as file:<code>.
+    descriptions:
+      zh: >-
+        使用已配置的语音合成模型（配置 tts_model，为 agent 上注册的 capability=speech 的
+        provider_id/model_id）把文本合成为语音。结果会存储为 file:<code>。
+    input_schema:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The text to synthesize.
+          descriptions:
+            zh: 要合成为语音的文本。
+        voice:
+          type: string
+          description: Optional voice id (provider-specific).
+          descriptions:
+            zh: 可选的音色 id（由提供商定义）。
+      required: [text]
+    required_config: [tts_model]
 
 config:
   - name: vlm_model
@@ -262,31 +329,47 @@ config:
     type: string
     scope: global
     default: ''
-  - name: image_base_url
-    description: Base URL for image-generate/image-edit (OpenAI-compatible).
-    descriptions:
-      zh: "image-generate/image-edit 的基础地址（OpenAI 兼容）。"
-    type: string
-    scope: global
-    default: ''
-  - name: image_api_key
-    description: API key for image-generate/image-edit.
-    descriptions:
-      zh: "image-generate/image-edit 的 API 密钥。"
-    type: string
-    scope: global
-    default: ''
   - name: image_model
-    description: Image model ref (provider_id/model_id) used by image-generate.
+    description: >-
+      Image model ref (provider_id/model_id, capability=image) used by
+      image-generate. Register the model on the agent first.
     descriptions:
-      zh: "image-generate 使用的图像生成模型引用（provider_id/model_id）。"
+      zh: >-
+        image-generate 使用的图像模型引用（provider_id/model_id，capability=image）。
+        请先在 agent 上注册该模型。
     type: string
     scope: global
     default: ''
   - name: image_edit_model
-    description: Image model ref (provider_id/model_id) used by image-edit.
+    description: >-
+      Image model ref (provider_id/model_id, capability=image) used by
+      image-edit. Register the model on the agent first.
     descriptions:
-      zh: "image-edit 使用的图像编辑模型引用（provider_id/model_id）。"
+      zh: >-
+        image-edit 使用的图像模型引用（provider_id/model_id，capability=image）。
+        请先在 agent 上注册该模型。
+    type: string
+    scope: global
+    default: ''
+  - name: video_model
+    description: >-
+      Video model ref (provider_id/model_id, capability=video) used by
+      video-generate. Register the model on the agent first.
+    descriptions:
+      zh: >-
+        video-generate 使用的视频模型引用（provider_id/model_id，capability=video）。
+        请先在 agent 上注册该模型。
+    type: string
+    scope: global
+    default: ''
+  - name: tts_model
+    description: >-
+      Speech model ref (provider_id/model_id, capability=speech) used by
+      tts-generate. Register the model on the agent first.
+    descriptions:
+      zh: >-
+        tts-generate 使用的语音模型引用（provider_id/model_id，capability=speech）。
+        请先在 agent 上注册该模型。
     type: string
     scope: global
     default: ''
