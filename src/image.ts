@@ -93,7 +93,7 @@ export function imageGenExecutes(
         `Generated ${stored.length} image(s) with ${modelId}.`,
         ...stored.map(s => `file:${s.code} (${s.mime}, ${s.bytes} bytes)`),
       ].join('\n'),
-      data: { images: stored, model: modelId, provider: modelId },
+      data: { images: stored, model: modelId },
     }
   }
 
