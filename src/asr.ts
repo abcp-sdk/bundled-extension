@@ -17,29 +17,29 @@ function strArg(m: Record<string, unknown>, k: string): string {
 /** audio-transcribe execute handler. */
 export const audioTranscribeExecute =
   (deps: BundledDeps): ToolSpec['execute'] =>
-  async (args, _callId, sessionName) => {
+  async (args, _callId, sessionName, _signal, tenant = '') => {
     const code = strArg(args, 'code')
     if (code === '') throw new Error('code is required')
     const language = strArg(args, 'language')
-    const meta = await deps.blobGet(code).then(r => r.meta)
+    const meta = await deps.blobGet(code, tenant).then(r => r.meta)
     const mime = String(meta['mime'] ?? '')
     if (!mime.startsWith('audio/')) {
       throw new Error(`file ${code} is not audio (${mime || 'unknown mime'})`)
     }
     const ref = String(
-      (await deps.resolveConfig('asr_model', sessionName)) ?? '',
+      (await deps.resolveConfig('asr_model', sessionName, tenant)) ?? '',
     ).trim()
     if (ref === '') {
       throw new Error(
         'asr_model not configured — set it to a transcription model registered on the agent (provider_id/model_id, capability=transcription)',
       )
     }
-    const resolved = await deps.resolveGenerative('transcription', ref)
+    const resolved = await deps.resolveGenerative('transcription', ref, tenant)
     if (resolved.isErr()) {
       throw new Error(`asr_model: ${resolved.error ?? 'model not found'}`)
     }
     const { model, modelId } = resolved.value!
-    const blob = await deps.blobGet(code)
+    const blob = await deps.blobGet(code, tenant)
     const { transcribe } = await import('ai')
     const res = await transcribe({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

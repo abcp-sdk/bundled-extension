@@ -31,13 +31,14 @@ function numArg(m: Record<string, unknown>, k: string, def: number): number {
 const TODOS_DDL = `
 CREATE TABLE IF NOT EXISTS bundled_todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant TEXT NOT NULL DEFAULT 'default',
   session_id TEXT NOT NULL,
   content TEXT NOT NULL,
   status TEXT NOT NULL,
   priority TEXT NOT NULL,
   created_unix INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
 );
-CREATE INDEX IF NOT EXISTS idx_bundled_todos_session ON bundled_todos (session_id);
+CREATE INDEX IF NOT EXISTS idx_bundled_todos_session ON bundled_todos (tenant, session_id);
 `
 
 /** Build the memory/history/file/vision execute handlers bound to [deps]. */
@@ -45,37 +46,52 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
   // Ensure the todos table exists (idempotent) at tool-set construction time.
   void deps.rawRun(TODOS_DDL).catch(() => {})
 
-  const writeTodos = async (sid: string, todos: Record<string, unknown>[]): Promise<number> => {
-    await deps.rawRun(`DELETE FROM bundled_todos WHERE session_id = ?`, [sid])
+  const writeTodos = async (
+    tenant: string,
+    sid: string,
+    todos: Record<string, unknown>[],
+  ): Promise<number> => {
+    await deps.rawRun(
+      `DELETE FROM bundled_todos WHERE tenant = ? AND session_id = ?`,
+      [tenant, sid],
+    )
     for (const t of todos) {
       const content = strArg(t, 'content')
       const status = strArg(t, 'status') || 'pending'
       const priority = strArg(t, 'priority') || 'medium'
       await deps.rawRun(
-        `INSERT INTO bundled_todos (session_id, content, status, priority) VALUES (?,?,?,?)`,
-        [sid, content, status, priority],
+        `INSERT INTO bundled_todos (tenant, session_id, content, status, priority) VALUES (?,?,?,?,?)`,
+        [tenant, sid, content, status, priority],
       )
     }
     return todos.length
   }
 
-  const sessionTip = async (sid: string): Promise<string> => {
-    const rows = await deps.rawAll(`SELECT tip_id FROM sessions WHERE name = ?`, [sid])
+  const sessionTip = async (tenant: string, sid: string): Promise<string> => {
+    const rows = await deps.rawAll(
+      `SELECT tip_id FROM sessions WHERE tenant = ? AND name = ?`,
+      [tenant, sid],
+    )
     if (rows.length === 0) return ''
     return String(rows[0]!['tip_id'] ?? '')
   }
 
-  const chainRaw = async (tip: string, limit: number): Promise<Array<{ id: string; role: string; created: string; depth: number }>> => {
+  const chainRaw = async (
+    tenant: string,
+    tip: string,
+    limit: number,
+  ): Promise<Array<{ id: string; role: string; created: string; depth: number }>> => {
     const rows = await deps.rawAll(
       `WITH RECURSIVE chain AS (
          SELECT m.id, m.role, m.prev_id, m.created_at, 0 AS depth
-         FROM messages m WHERE m.id = ?
+         FROM messages m WHERE m.id = ? AND m.tenant = ?
          UNION ALL
          SELECT m.id, m.role, m.prev_id, m.created_at, c.depth + 1
          FROM messages m JOIN chain c ON m.id = c.prev_id
+         WHERE m.tenant = ?
        )
        SELECT id, role, created_at, depth FROM chain WHERE depth < ? ORDER BY depth ASC`,
-      [tip, limit],
+      [tip, tenant, tenant, limit],
     )
     return rows.map(r => ({
       id: String(r['id'] ?? ''),
@@ -85,14 +101,18 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     }))
   }
 
-  const textPartsForMessages = async (ids: string[], query: string): Promise<Map<string, string>> => {
+  const textPartsForMessages = async (
+    tenant: string,
+    ids: string[],
+    query: string,
+  ): Promise<Map<string, string>> => {
     const out = new Map<string, string>()
     if (ids.length === 0) return out
     const placeholders = ids.map(() => '?').join(',')
     const rows = await deps.rawAll(
-      `SELECT message_id, data FROM parts WHERE message_id IN (${placeholders}) AND type = 'text'
+      `SELECT message_id, data FROM parts WHERE tenant = ? AND message_id IN (${placeholders}) AND type = 'text'
        ORDER BY message_id, seq`,
-      ids,
+      [tenant, ...ids],
     )
     for (const r of rows) {
       const mid = String(r['message_id'] ?? '')
@@ -109,13 +129,16 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     return out
   }
 
-  const partsForMessages = async (ids: string[]): Promise<Map<string, { name: string; changeID: string }[]>> => {
+  const partsForMessages = async (
+    tenant: string,
+    ids: string[],
+  ): Promise<Map<string, { name: string; changeID: string }[]>> => {
     const out = new Map<string, { name: string; changeID: string }[]>()
     if (ids.length === 0) return out
     const placeholders = ids.map(() => '?').join(',')
     const rows = await deps.rawAll(
-      `SELECT message_id, type, data FROM parts WHERE message_id IN (${placeholders}) ORDER BY message_id, seq`,
-      ids,
+      `SELECT message_id, type, data FROM parts WHERE tenant = ? AND message_id IN (${placeholders}) ORDER BY message_id, seq`,
+      [tenant, ...ids],
     )
     for (const r of rows) {
       const mid = String(r['message_id'] ?? '')
@@ -159,16 +182,17 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
   }
 
   const buildHistoryEntries = async (
+    tenant: string,
     sid: string,
     query: string,
     limit: number,
   ): Promise<Array<Record<string, unknown>>> => {
-    const tip = await sessionTip(sid)
+    const tip = await sessionTip(tenant, sid)
     if (tip === '') return []
-    const chain = await chainRaw(tip, 10000)
+    const chain = await chainRaw(tenant, tip, 10000)
     const ids = chain.map(c => c.id)
-    const textByMsg = await textPartsForMessages(ids, query)
-    const toolByMsg = await partsForMessages(ids)
+    const textByMsg = await textPartsForMessages(tenant, ids, query)
+    const toolByMsg = await partsForMessages(tenant, ids)
     const out: Array<Record<string, unknown>> = []
     for (const r of chain) {
       const content = textByMsg.get(r.id) ?? ''
@@ -199,15 +223,22 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     return out
   }
 
-  const fileMetaFromBlob = async (code: string): Promise<Record<string, unknown>> => {
-    const res = await deps.blobGet(code)
+  const fileMetaFromBlob = async (
+    code: string,
+    tenant: string,
+  ): Promise<Record<string, unknown>> => {
+    const res = await deps.blobGet(code, tenant)
     return res.meta
   }
 
-  const vlmRead = async (prompt: string, imageDataUrl: string): Promise<string> => {
-    const modelId = String(await deps.resolveConfig('vlm_model') ?? '')
+  const vlmRead = async (
+    prompt: string,
+    imageDataUrl: string,
+    tenant: string,
+  ): Promise<string> => {
+    const modelId = String(await deps.resolveConfig('vlm_model', undefined, tenant) ?? '')
     if (modelId === '') throw new Error('vlm_model not configured: set a vision model first')
-    const resolved = await deps.resolveModel(null as never, modelId)
+    const resolved = await deps.resolveModel(null as never, modelId, tenant)
     if (resolved.isErr()) throw new Error(resolved.error ?? 'vision model not found')
     const model = resolved.value!.model
     const { generateText } = await import('ai')
@@ -226,20 +257,25 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     return res.text
   }
 
-  const imageRead = async (code: string, prompt: string, sessionName: string): Promise<{ content: string; data: Record<string, unknown> }> => {
-    const meta = await fileMetaFromBlob(code)
+  const imageRead = async (
+    code: string,
+    prompt: string,
+    sessionName: string,
+    tenant: string,
+  ): Promise<{ content: string; data: Record<string, unknown> }> => {
+    const meta = await fileMetaFromBlob(code, tenant)
     const mime = String(meta['mime'] ?? '')
     if (!mime.startsWith('image/')) {
       throw new Error(`file ${code} is not an image (${mime})`)
     }
-    const blob = await deps.blobGet(code)
+    const blob = await deps.blobGet(code, tenant)
     const b64 = Buffer.from(blob.data).toString('base64')
     const dataUrl = `data:${mime};base64,${b64}`
-    const text = await vlmRead(prompt, dataUrl)
+    const text = await vlmRead(prompt, dataUrl, tenant)
     return {
       content: text,
       data: {
-        model: String(await deps.resolveConfig('vlm_model') ?? ''),
+        model: String(await deps.resolveConfig('vlm_model', undefined, tenant) ?? ''),
         code,
         mime,
         size: Number(meta['size'] ?? 0),
@@ -252,36 +288,36 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
   }
 
   return {
-    'todo-write': async (args, _callId, sessionName) => {
+    'todo-write': async (args, _callId, sessionName, _signal, tenant = '') => {
       if (!sessionName) toolError('missing session context (session_name)')
       const todos = Array.isArray(args['todos'])
         ? (args['todos'] as Record<string, unknown>[])
         : []
-      const n = await writeTodos(sessionName, todos)
+      const n = await writeTodos(tenant, sessionName, todos)
       return { content: `Updated ${n} todo(s).`, data: { count: n } }
     },
-    'history-search': async (args, _callId, sessionName) => {
+    'history-search': async (args, _callId, sessionName, _signal, tenant = '') => {
       if (!sessionName) toolError('missing session context (session_name)')
       const query = strArg(args, 'query')
       const from = strArg(args, 'from')
       const to = strArg(args, 'to')
       const limit = numArg(args, 'limit', 50)
-      const entries = await buildHistoryEntries(sessionName, query, limit)
+      const entries = await buildHistoryEntries(tenant, sessionName, query, limit)
       const filtered = entries.filter(e => {
         if (from !== '' && String(e['created_at']) < from) return false
         if (to !== '' && String(e['created_at']) > to) return false
         return true
       })
-      const locale = String(await deps.resolveConfig('agent.locale') ?? 'en')
+      const locale = String(await deps.resolveConfig('agent.locale', undefined, tenant) ?? 'en')
       const content = renderHistoryList(locale, filtered)
       return { content, data: { count: filtered.length, entries } }
     },
-    'history-range': async (args, _callId, sessionName) => {
+    'history-range': async (args, _callId, sessionName, _signal, tenant = '') => {
       if (!sessionName) toolError('missing session context (session_name)')
       const from = numArg(args, 'from', 0)
       const to = numArg(args, 'to', 0)
       const limit = numArg(args, 'limit', 200)
-      const chain = await chainRaw(await sessionTip(sessionName), limit)
+      const chain = await chainRaw(tenant, await sessionTip(tenant, sessionName), limit)
       const total = chain.length
       const norm = (d: number): number => (d < 0 ? total + d : d)
       let f = norm(from)
@@ -290,8 +326,8 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
       if (t > total) t = total
       if (f >= t) return { content: 'history_range: empty.', data: { count: 0 } }
       const ids = chain.map(c => c.id)
-      const textByMsg = await textPartsForMessages(ids, '')
-      const toolByMsg = await partsForMessages(ids)
+      const textByMsg = await textPartsForMessages(tenant, ids, '')
+      const toolByMsg = await partsForMessages(tenant, ids)
       const entries = chain.slice(f, t).map(r => {
         let toolName = ''
         let changeID = ''
@@ -312,23 +348,23 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
           depth: r.depth,
         }
       })
-      const locale = String(await deps.resolveConfig('agent.locale') ?? 'en')
+      const locale = String(await deps.resolveConfig('agent.locale', undefined, tenant) ?? 'en')
       const content = renderHistoryList(locale, entries)
       return { content, data: { count: entries.length, entries } }
     },
-    'file-info': async (args, _callId, _sessionName) => {
+    'file-info': async (args, _callId, _sessionName, _signal, tenant = '') => {
       const code = strArg(args, 'code')
       if (code === '') toolError('code is required')
-      const meta = await fileMetaFromBlob(code)
+      const meta = await fileMetaFromBlob(code, tenant)
       const content = `File ${code}: ${String(meta['name'] ?? '')} (${String(meta['mime'] ?? '')}, ${Number(meta['size'] ?? 0)} bytes, sha256=${String(meta['sha256'] ?? '')})`
       return { content, data: { meta } }
     },
-    'image-read': async (args, _callId, sessionName) => {
+    'image-read': async (args, _callId, sessionName, _signal, tenant = '') => {
       const code = strArg(args, 'code')
       if (code === '') toolError('code is required')
       let prompt = strArg(args, 'prompt')
       if (prompt === '') prompt = 'Describe this image in detail.'
-      const res = await imageRead(code, prompt, sessionName)
+      const res = await imageRead(code, prompt, sessionName, tenant)
       return { content: res.content, data: res.data }
     },
   }

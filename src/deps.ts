@@ -6,8 +6,10 @@ import type { LanguageModel } from 'ai'
  * standalone lib: the agent server supplies these at boot. This lets the
  * agent either serve it in-process (bundle) or omit it entirely.
  */
-export interface BundledDeps {  /** Resolve a provider/model reference to an AI SDK LanguageModel. */
-  resolveModel: (db: unknown, modelId: string) => Promise<{
+export interface BundledDeps {
+  /** Resolve a provider/model reference to an AI SDK LanguageModel.
+   *  `tenant` scopes the provider registry lookup (v2). */
+  resolveModel: (db: unknown, modelId: string, tenant?: string) => Promise<{
     isOk: () => boolean
     isErr: () => boolean
     value?: { model: LanguageModel }
@@ -24,20 +26,29 @@ export interface BundledDeps {  /** Resolve a provider/model reference to an AI 
   resolveGenerative: (
     capability: 'image' | 'video' | 'speech' | 'transcription',
     ref: string,
+    tenant?: string,
   ) => Promise<{
     isOk: () => boolean
     isErr: () => boolean
     value?: { model: unknown; modelId: string; providerId: string }
     error?: string
   }>
-  /** Resolve an effective config knob (session > global > default). */
-  resolveConfig: (name: string, sessionName?: string) => Promise<unknown>
+  /** Resolve an effective config knob (session > global > default), scoped
+   *  to the tenant. */
+  resolveConfig: (
+    name: string,
+    sessionName?: string,
+    tenant?: string,
+  ) => Promise<unknown>
   /** Raw SQL read (positional `?` for sqlite). Returns plain row records. */
   rawAll: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>
   /** Raw SQL write (DDL / INSERT / UPDATE / DELETE). */
   rawRun: (sql: string, params?: unknown[]) => Promise<void>
-  /** Read a stored file blob (meta + bytes) by `file:<code>`. */
-  blobGet: (code: string) => Promise<{ meta: Record<string, unknown>; data: Uint8Array }>
+  /** Read a stored file blob (meta + bytes) by `file:<code>`, tenant-scoped. */
+  blobGet: (
+    code: string,
+    tenant?: string,
+  ) => Promise<{ meta: Record<string, unknown>; data: Uint8Array }>
   /**
    * Store generated media bytes (images/videos/audio) in the agent blob
    * store so they can be referenced as `file:<code>`. Returns the stored
@@ -49,6 +60,8 @@ export interface BundledDeps {  /** Resolve a provider/model reference to an AI 
     name: string
     mime: string
     session: string
+    /** Isolation key the generated media belongs to (v2). */
+    tenant?: string
   }) => Promise<{ code: string; mime: string }>
 }
 

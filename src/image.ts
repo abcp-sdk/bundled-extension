@@ -22,18 +22,19 @@ function strArg(m: Record<string, unknown>, k: string): string {
 async function generativeFromConfig(
   deps: BundledDeps,
   sessionName: string,
+  tenant: string,
   modelCfg: string,
   capability: 'image' | 'video' | 'speech',
 ): Promise<{ model: unknown; modelId: string; providerId: string }> {
   const ref = String(
-    (await deps.resolveConfig(modelCfg, sessionName)) ?? '',
+    (await deps.resolveConfig(modelCfg, sessionName, tenant)) ?? '',
   ).trim()
   if (ref === '') {
     throw new Error(
       `${modelCfg} not configured — set it to a ${capability} model registered on the agent (provider_id/model_id)`,
     )
   }
-  const resolved = await deps.resolveGenerative(capability, ref)
+  const resolved = await deps.resolveGenerative(capability, ref, tenant)
   if (resolved.isErr()) {
     throw new Error(`${modelCfg}: ${resolved.error ?? 'model not found'}`)
   }
@@ -45,6 +46,7 @@ async function generativeFromConfig(
 async function storeMedia(
   deps: BundledDeps,
   sessionName: string,
+  tenant: string,
   items: Array<{ uint8Array: Uint8Array; mediaType?: string }>,
 ): Promise<Array<{ code: string; mime: string; bytes: number }>> {
   const out: Array<{ code: string; mime: string; bytes: number }> = []
@@ -55,6 +57,7 @@ async function storeMedia(
       name: `generated-${Date.now()}-${out.length}.png`,
       mime: img.mediaType ?? 'image/png',
       session: sessionName,
+      tenant,
     })
     out.push({
       code: stored.code,
@@ -69,12 +72,19 @@ async function storeMedia(
 export function imageGenExecutes(
   deps: BundledDeps,
 ): Record<string, ToolSpec['execute']> {
-  const imageGenerate: ToolSpec['execute'] = async (args, _callId, sessionName) => {
+  const imageGenerate: ToolSpec['execute'] = async (
+    args,
+    _callId,
+    sessionName,
+    _signal,
+    tenant = '',
+  ) => {
     const prompt = strArg(args, 'prompt')
     if (prompt.trim() === '') throw new Error('prompt is required')
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
+      tenant,
       'image_model',
       'image',
     )
@@ -87,7 +97,7 @@ export function imageGenExecutes(
       n: Number(args['n'] ?? 1),
       ...(size.trim() === '' ? {} : { size: size as `${number}x${number}` }),
     })
-    const stored = await storeMedia(deps, sessionName ?? '', res.images)
+    const stored = await storeMedia(deps, sessionName ?? '', tenant, res.images)
     return {
       content: [
         `Generated ${stored.length} image(s) with ${modelId}.`,
@@ -97,7 +107,13 @@ export function imageGenExecutes(
     }
   }
 
-  const imageEdit: ToolSpec['execute'] = async (args, _callId, sessionName) => {
+  const imageEdit: ToolSpec['execute'] = async (
+    args,
+    _callId,
+    sessionName,
+    _signal,
+    tenant = '',
+  ) => {
     const code = strArg(args, 'code')
     const prompt = strArg(args, 'prompt')
     if (code === '') throw new Error('code is required')
@@ -105,10 +121,11 @@ export function imageGenExecutes(
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
+      tenant,
       'image_edit_model',
       'image',
     )
-    const blob = await deps.blobGet(code)
+    const blob = await deps.blobGet(code, tenant)
     const { generateImage } = await import('ai')
     const res = await generateImage({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,7 +135,7 @@ export function imageGenExecutes(
         text: prompt,
       },
     })
-    const stored = await storeMedia(deps, sessionName ?? '', res.images)
+    const stored = await storeMedia(deps, sessionName ?? '', tenant, res.images)
     return {
       content: [
         `Edited ${stored.length} image(s) from file:${code} with ${modelId}.`,
@@ -128,12 +145,19 @@ export function imageGenExecutes(
     }
   }
 
-  const videoGenerate: ToolSpec['execute'] = async (args, _callId, sessionName) => {
+  const videoGenerate: ToolSpec['execute'] = async (
+    args,
+    _callId,
+    sessionName,
+    _signal,
+    tenant = '',
+  ) => {
     const prompt = strArg(args, 'prompt')
     if (prompt.trim() === '') throw new Error('prompt is required')
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
+      tenant,
       'video_model',
       'video',
     )
@@ -151,6 +175,7 @@ export function imageGenExecutes(
     const stored = await storeMedia(
       deps,
       sessionName ?? '',
+      tenant,
       res.videos.map(v => ({
         uint8Array: v.uint8Array,
         mediaType: v.mediaType ?? 'video/mp4',
@@ -165,12 +190,19 @@ export function imageGenExecutes(
     }
   }
 
-  const ttsGenerate: ToolSpec['execute'] = async (args, _callId, sessionName) => {
+  const ttsGenerate: ToolSpec['execute'] = async (
+    args,
+    _callId,
+    sessionName,
+    _signal,
+    tenant = '',
+  ) => {
     const text = strArg(args, 'text')
     if (text.trim() === '') throw new Error('text is required')
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
+      tenant,
       'tts_model',
       'speech',
     )
@@ -186,6 +218,7 @@ export function imageGenExecutes(
     const stored = await storeMedia(
       deps,
       sessionName ?? '',
+      tenant,
       [{ uint8Array: res.audio.uint8Array, mediaType: mime }],
     )
     return {

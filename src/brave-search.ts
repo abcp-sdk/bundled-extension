@@ -87,13 +87,15 @@ async function callBrave(apiKey: string, query: string, count: number): Promise<
 
 /** brave-search execute handler (description/schema from manifest.yaml). */
 export function braveSearchExecute(deps: BundledDeps): ToolSpec['execute'] {
-  return async (args, _callId, sessionName) => {
+  return async (args, _callId, sessionName, _signal, tenant = '') => {
     const query = String(args['query'] ?? '')
     if (query.trim() === '') throw new Error('query is required')
     let count = Number(args['count'] ?? 8)
     if (!Number.isInteger(count) || count < 1) count = 8
     if (count > BRAVE_MAX_RESULTS) count = BRAVE_MAX_RESULTS
-    const apiKey = String(await deps.resolveConfig('brave_api_key', sessionName) ?? '')
+    const apiKey = String(
+      (await deps.resolveConfig('brave_api_key', sessionName, tenant)) ?? '',
+    )
     const text = await callBrave(apiKey, query, count)
     return { content: text, data: { provider: 'brave', query } }
   }
