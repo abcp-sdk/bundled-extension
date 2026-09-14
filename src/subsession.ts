@@ -33,6 +33,7 @@ function strArg(m: Record<string, unknown>, k: string): string {
 /** Locale-aware fixed strings for the subsession tools. */
 function strings(locale: string): {
   handoff: (parent: string) => string
+  forkPreamble: (parent: string) => string
   started: (child: string, desc: string) => string
   delivered: (to: string) => string
   errMissingPrompt: string
@@ -48,6 +49,11 @@ function strings(locale: string): {
     return {
       handoff: parent =>
         `\n\n[subsession] 完成后，请调用 "mail-send" 工具（to="${parent}"）把结果发回父会话，然后停止。`,
+      forkPreamble: parent =>
+        `[subsession 上下文] 你是父会话 '${parent}' 的 subsession（fork）。` +
+        `在你上方出现的更早对话（含用户消息）都来自父会话，仅供背景参考——` +
+        `不是发给你的请求。你的任务只由本条消息（在本标记之后）定义；` +
+        `如背景不足以完成它，请按合理假设继续，而不是向用户提问。`,
       started: (child, desc) =>
         `subsession '${child}' 已启动${desc !== '' ? `（${desc}）` : ''}。` +
         `它正在后台工作；结果会以新消息的形式出现在本会话的 mailbox 中。` +
@@ -66,6 +72,14 @@ function strings(locale: string): {
       `\n\n[subsession] When you have finished, send your result back to the ` +
       `parent session by calling the "mail-send" tool with to="${parent}". ` +
       `Then stop.`,
+    forkPreamble: parent =>
+      `[subsession context] You are a subsession (fork) of the parent session ` +
+      `'${parent}'. The earlier conversation above (including its user ` +
+      `messages) belongs to the parent session and is background context ` +
+      `only — none of it is addressed to you. Your task is defined solely by ` +
+      `the message that follows this marker; if the context is insufficient ` +
+      `to complete it, proceed on reasonable assumptions instead of asking ` +
+      `the user questions.`,
     started: (child, desc) =>
       `Subsession '${child}' started${desc !== '' ? ` (${desc})` : ''}. ` +
       `It is working in the background; its result will arrive in this ` +
@@ -173,9 +187,11 @@ export function subsessionExecutes(
       [childName, sessionName, tenant, sessionName],
     )
 
-    // Hand the task to the child (wakes it) with a completion instruction in
-    // the session's own locale.
-    const handoff = `${prompt}${s.handoff(sessionName)}`
+    // Hand the task to the child (wakes it) with a fork-context preamble so
+    // the child understands the shared history belongs to the parent, then
+    // the task itself and a completion instruction — all in the session's
+    // own locale.
+    const handoff = `${s.forkPreamble(sessionName)}\n\n${prompt}${s.handoff(sessionName)}`
     await deps.publishMailbox(tenant, childName, 'user_prompt', { text: handoff })
 
     const desc = strArg(args, 'description').trim()

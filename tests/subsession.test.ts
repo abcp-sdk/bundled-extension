@@ -323,3 +323,41 @@ describe('subsession-create i18n', () => {
     db.close()
   })
 })
+
+describe('subsession handoff fork-context preamble', () => {
+  it('prepends a fork-context preamble naming the parent (en)', async () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(`
+      CREATE TABLE sessions (tenant TEXT, name TEXT, model TEXT, variant TEXT,
+        preset TEXT, tip_id TEXT, max_turns INTEGER, system_prompt TEXT,
+        locale TEXT, "group" TEXT, created_at TEXT, updated_at TEXT);
+    `)
+    db.prepare(
+      `INSERT INTO sessions VALUES ('t','p','m','','default','TIP',1,'sys','','',datetime('now'),datetime('now'))`,
+    ).run()
+    const sent: Array<{ payload: unknown }> = []
+    const deps = {
+      rawAll: async (sql: string, params: unknown[] = []) =>
+        db.prepare(sql).all(...(params as never[])),
+      rawRun: async (sql: string, params: unknown[] = []) =>
+        db.prepare(sql).run(...(params as never[])),
+      publishMailbox: async (_t: string, _s: string, _ty: string, p: unknown) =>
+        sent.push({ payload: p }),
+      getSessionVariable: async () => undefined,
+      resolveConfig: async () => undefined,
+    } as unknown as BundledDeps
+    await subsessionExecutes(deps)['subsession-create']!(
+      { prompt: 'do it', name: 'c1' },
+      'call',
+      'p',
+      undefined,
+      't',
+    )
+    const text = String((sent[0]!.payload as { text: string }).text)
+    expect(text).toContain('subsession context')
+    expect(text).toContain("parent session 'p'")
+    // Task must come AFTER the preamble.
+    expect(text.indexOf('subsession context')).toBeLessThan(text.indexOf('do it'))
+    db.close()
+  })
+})

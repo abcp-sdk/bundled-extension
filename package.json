@@ -1,6 +1,6 @@
 {
   "name": "@abc-protocol/bundled-extension",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Bundled extension server: memory/history tools + web-fetch/brave-search + image generate/edit, served in-process over the abc protocol.",
   "type": "module",
   "main": "./src/index.ts",
