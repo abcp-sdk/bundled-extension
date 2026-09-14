@@ -57,6 +57,9 @@ function fixture() {
     ) => {
       sent.push({ tenant, sessionName, type, payload })
     },
+    // No agent-projected session locale by default => tools fall back to 'en'.
+    getSessionVariable: async () => undefined,
+    resolveConfig: async () => undefined,
   } as unknown as BundledDeps
   const tools = subsessionExecutes(deps)
   return { db, deps, sent, tools }
@@ -276,5 +279,47 @@ describe('deleteSubsessions (cascade on parent delete)', () => {
     expect(rowOf(fx.db, 'other')).toBeDefined()
     const mb = fx.db.prepare('SELECT id FROM mailbox').all()
     expect(mb).toHaveLength(0)
+  })
+})
+
+describe('subsession-create i18n', () => {
+  it('writes the handoff instruction in the session locale (zh)', async () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(`
+      CREATE TABLE sessions (tenant TEXT, name TEXT, model TEXT, variant TEXT,
+        preset TEXT, tip_id TEXT, max_turns INTEGER, system_prompt TEXT,
+        locale TEXT, "group" TEXT, created_at TEXT, updated_at TEXT);
+    `)
+    db.prepare(
+      `INSERT INTO sessions VALUES ('t','p','m','','default','TIP',1,'sys','','',datetime('now'),datetime('now'))`,
+    ).run()
+    const sent: Array<{ payload: unknown }> = []
+    const deps = {
+      rawAll: async (sql: string, params: unknown[] = []) =>
+        db.prepare(sql).all(...(params as never[])),
+      rawRun: async (sql: string, params: unknown[] = []) =>
+        db.prepare(sql).run(...(params as never[])),
+      publishMailbox: async (_t: string, _s: string, _ty: string, p: unknown) =>
+        sent.push({ payload: p }),
+      // The agent projects this session's locale as vars.agent.<sid>.locale.
+      getSessionVariable: async (
+        _t: string,
+        _p: string,
+        _s: string,
+        name: string,
+      ) => (name === 'locale' ? 'zh-CN' : undefined),
+      resolveConfig: async () => undefined,
+    } as unknown as BundledDeps
+    await subsessionExecutes(deps)['subsession-create']!(
+      { prompt: 'do it', name: 'c1' },
+      'call',
+      'p',
+      undefined,
+      't',
+    )
+    const text = String((sent[0]!.payload as { text: string }).text)
+    expect(text).toContain('mail-send')
+    expect(text).toContain('发回父会话')
+    db.close()
   })
 })

@@ -40,6 +40,17 @@ export interface BundledDeps {
     sessionName?: string,
     tenant?: string,
   ) => Promise<unknown>
+  /**
+   * Read a session variable the agent projects (vars bucket, provider "agent")
+   * e.g. `locale`. Returns undefined when unset. Used by tools that need the
+   * session's effective locale.
+   */
+  getSessionVariable: (
+    tenant: string,
+    provider: string,
+    sessionName: string,
+    name: string,
+  ) => Promise<string | undefined>
   /** Raw SQL read (positional `?` for sqlite). Returns plain row records. */
   rawAll: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>
   /** Raw SQL write (DDL / INSERT / UPDATE / DELETE). */

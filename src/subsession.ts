@@ -30,6 +30,76 @@ function strArg(m: Record<string, unknown>, k: string): string {
   return typeof v === 'string' ? v : ''
 }
 
+/** Locale-aware fixed strings for the subsession tools. */
+function strings(locale: string): {
+  handoff: (parent: string) => string
+  started: (child: string, desc: string) => string
+  delivered: (to: string) => string
+  errMissingPrompt: string
+  errNested: string
+  errParentMissing: (sid: string) => string
+  errExists: (sid: string) => string
+  errMissingTo: string
+  errMissingText: string
+  errTargetMissing: (sid: string) => string
+} {
+  const zh = locale.toLowerCase().startsWith('zh')
+  if (zh)
+    return {
+      handoff: parent =>
+        `\n\n[subsession] 完成后，请调用 "mail-send" 工具（to="${parent}"）把结果发回父会话，然后停止。`,
+      started: (child, desc) =>
+        `subsession '${child}' 已启动${desc !== '' ? `（${desc}）` : ''}。` +
+        `它正在后台工作；结果会以新消息的形式出现在本会话的 mailbox 中。` +
+        `现在请立即结束本轮，不要轮询——结果到达时会自动恢复你。`,
+      delivered: to => `消息已投递到会话 '${to}'。`,
+      errMissingPrompt: 'subsession-create: 缺少 "prompt"。',
+      errNested: 'subsession-create: 本会话本身就是一个 subsession，不允许嵌套创建。',
+      errParentMissing: sid => `subsession-create: 找不到父会话 '${sid}'。`,
+      errExists: sid => `subsession-create: 会话 '${sid}' 已存在。`,
+      errMissingTo: 'mail-send: 缺少 "to"。',
+      errMissingText: 'mail-send: 缺少 "text"。',
+      errTargetMissing: sid => `mail-send: 找不到目标会话 '${sid}'。`,
+    }
+  return {
+    handoff: parent =>
+      `\n\n[subsession] When you have finished, send your result back to the ` +
+      `parent session by calling the "mail-send" tool with to="${parent}". ` +
+      `Then stop.`,
+    started: (child, desc) =>
+      `Subsession '${child}' started${desc !== '' ? ` (${desc})` : ''}. ` +
+      `It is working in the background; its result will arrive in this ` +
+      `session's mailbox as a new message. END YOUR TURN NOW and do not ` +
+      `poll — you will be resumed when the result arrives.`,
+    delivered: to => `Message delivered to session '${to}'.`,
+    errMissingPrompt: 'subsession-create: missing "prompt".',
+    errNested:
+      'subsession-create: this session is itself a subsession; nested subsessions are not allowed.',
+    errParentMissing: sid => `subsession-create: parent session '${sid}' not found.`,
+    errExists: sid => `subsession-create: session '${sid}' already exists.`,
+    errMissingTo: 'mail-send: missing "to".',
+    errMissingText: 'mail-send: missing "text".',
+    errTargetMissing: sid => `mail-send: target session '${sid}' not found.`,
+  }
+}
+
+/** Session locale as the agent projects it (vars bucket, provider "agent"),
+ *  falling back to the tenant-global `locale` config, then English. */
+async function localeOf(
+  deps: BundledDeps,
+  tenant: string,
+  sessionName: string,
+): Promise<string> {
+  const session = await deps
+    .getSessionVariable(tenant, 'agent', sessionName, 'locale')
+    .catch(() => undefined)
+  if (typeof session === 'string' && session !== '') return session
+  const cfg = await deps
+    .resolveConfig('locale', undefined, tenant)
+    .catch(() => undefined)
+  return typeof cfg === 'string' && cfg !== '' ? cfg : 'en'
+}
+
 /** Short random suffix for auto-generated child names. */
 function shortId(): string {
   return Math.random().toString(36).slice(2, 8)
@@ -71,26 +141,24 @@ export function subsessionExecutes(
     tenantArg,
   ) => {
     const tenant = tenantArg ?? 'default'
+    const s = strings(await localeOf(deps, tenant, sessionName))
     const prompt = strArg(args, 'prompt').trim()
     if (prompt === '') {
-      return { content: 'subsession: missing "prompt".' }
+      return { content: s.errMissingPrompt }
     }
     // Depth limit 1: a child (group != '') may not spawn further children.
     const parentGroup = await groupOf(tenant, sessionName)
     if (parentGroup !== '') {
-      return {
-        content:
-          'subsession: this session is itself a subsession; nested subsessions are not allowed.',
-      }
+      return { content: s.errNested }
     }
     if (!(await sessionExists(tenant, sessionName))) {
-      return { content: `subsession: parent session '${sessionName}' not found.` }
+      return { content: s.errParentMissing(sessionName) }
     }
 
     const explicit = strArg(args, 'name').trim()
     const childName = explicit !== '' ? explicit : `${sessionName}#sub-${shortId()}`
     if (await sessionExists(tenant, childName)) {
-      return { content: `subsession: session '${childName}' already exists.` }
+      return { content: s.errExists(childName) }
     }
 
     // O(1) fork: copy every inheritable column from the parent, repoint tip_id
@@ -105,43 +173,35 @@ export function subsessionExecutes(
       [childName, sessionName, tenant, sessionName],
     )
 
-    // Hand the task to the child (wakes it) with a completion instruction.
-    const handoff =
-      `${prompt}\n\n` +
-      `[subsession] When you have finished, send your result back to the ` +
-      `parent session by calling the "mail-send" tool with ` +
-      `to="${sessionName}". Then stop.`
+    // Hand the task to the child (wakes it) with a completion instruction in
+    // the session's own locale.
+    const handoff = `${prompt}${s.handoff(sessionName)}`
     await deps.publishMailbox(tenant, childName, 'user_prompt', { text: handoff })
 
     const desc = strArg(args, 'description').trim()
-    return {
-      content:
-        `Subsession '${childName}' started${desc !== '' ? ` (${desc})` : ''}. ` +
-        `It is working in the background; its result will arrive in this ` +
-        `session's mailbox as a new message. END YOUR TURN NOW and do not ` +
-        `poll — you will be resumed when the result arrives.`,
-    }
+    return { content: s.started(childName, desc) }
   }
 
   const sessionSend: ToolSpec['execute'] = async (
     args,
     _callId,
-    _sessionName,
+    sessionName,
     _signal,
     tenantArg,
   ) => {
     const tenant = tenantArg ?? 'default'
+    const s = strings(await localeOf(deps, tenant, sessionName))
     const to = strArg(args, 'to').trim()
     const text = strArg(args, 'text')
-    if (to === '') return { content: 'mail-send: missing "to".' }
-    if (text === '') return { content: 'mail-send: missing "text".' }
+    if (to === '') return { content: s.errMissingTo }
+    if (text === '') return { content: s.errMissingText }
     if (!(await sessionExists(tenant, to))) {
-      return { content: `mail-send: target session '${to}' not found.` }
+      return { content: s.errTargetMissing(to) }
     }
     // A `user_prompt` message wakes the target and continues its turn (an
     // `event` would only fold into its context without triggering a turn).
     await deps.publishMailbox(tenant, to, 'user_prompt', { text })
-    return { content: `Message delivered to session '${to}'.` }
+    return { content: s.delivered(to) }
   }
 
   return {
