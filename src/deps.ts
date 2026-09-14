@@ -47,7 +47,7 @@ export interface BundledDeps {
   /**
    * Publish a durable mailbox message to a session. `type` is one of
    * `user_prompt` (triggers a turn), `event` (folded into context only) or
-   * `interrupt`. Used by the subsession / session-send tools to hand work to
+   * `interrupt`. Used by the subsession-create / mail-send tools to hand work to
    * another session and to wake a parent when a child finishes.
    */
   publishMailbox: (

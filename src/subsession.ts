@@ -14,7 +14,7 @@
  * Handoff is plain mailbox messaging (the same channel the HTTP prompt route
  * uses):
  *   - parent → child: `user_prompt` carrying the task (wakes the child).
- *   - child → parent: `session-send` to the parent's name with the result
+ *   - child → parent: `mail-send` to the parent's name with the result
  *     (wakes the parent to continue its turn).
  *
  * There is no synchronous wait: the parent's tool call returns immediately and
@@ -35,7 +35,7 @@ function shortId(): string {
   return Math.random().toString(36).slice(2, 8)
 }
 
-/** Build the subsession + session-send execute handlers bound to [deps]. */
+/** Build the subsession-create + mail-send execute handlers bound to [deps]. */
 export function subsessionExecutes(
   deps: BundledDeps,
 ): Record<string, ToolSpec['execute']> {
@@ -109,7 +109,7 @@ export function subsessionExecutes(
     const handoff =
       `${prompt}\n\n` +
       `[subsession] When you have finished, send your result back to the ` +
-      `parent session by calling the "session-send" tool with ` +
+      `parent session by calling the "mail-send" tool with ` +
       `to="${sessionName}". Then stop.`
     await deps.publishMailbox(tenant, childName, 'user_prompt', { text: handoff })
 
@@ -133,10 +133,10 @@ export function subsessionExecutes(
     const tenant = tenantArg ?? 'default'
     const to = strArg(args, 'to').trim()
     const text = strArg(args, 'text')
-    if (to === '') return { content: 'session-send: missing "to".' }
-    if (text === '') return { content: 'session-send: missing "text".' }
+    if (to === '') return { content: 'mail-send: missing "to".' }
+    if (text === '') return { content: 'mail-send: missing "text".' }
     if (!(await sessionExists(tenant, to))) {
-      return { content: `session-send: target session '${to}' not found.` }
+      return { content: `mail-send: target session '${to}' not found.` }
     }
     // A `user_prompt` message wakes the target and continues its turn (an
     // `event` would only fold into its context without triggering a turn).
@@ -145,8 +145,8 @@ export function subsessionExecutes(
   }
 
   return {
-    subsession,
-    'session-send': sessionSend,
+    'subsession-create': subsession,
+    'mail-send': sessionSend,
   }
 }
 

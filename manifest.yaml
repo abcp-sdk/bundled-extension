@@ -353,7 +353,7 @@ tools:
     required_config: [tts_model]
 
   # ---- cross-session: subsession (O(1) fork child) + direct messaging ----
-  - name: subsession
+  - name: subsession-create
     description: >-
       Start a subsession to work on a self-contained task in the background.
       A subsession is an ordinary session forked from THIS one (zero-copy: it
@@ -391,7 +391,7 @@ tools:
             zh: 可选的显式 subsession 名称（默认自动生成）。
       required: [prompt]
 
-  - name: session-send
+  - name: mail-send
     description: >-
       Send a message to another session in the same tenant, delivered to its
       mailbox. The target resumes its turn on receipt (a user_prompt-style
