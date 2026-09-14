@@ -15,10 +15,12 @@ import { braveSearchExecute } from './brave-search.js'
 import { imageGenExecutes } from './image.js'
 import { audioTranscribeExecute } from './asr.js'
 import { memoryExecutes } from './memory.js'
+import { deleteSubsessions, subsessionExecutes } from './subsession.js'
 
 export * from './deps.js'
 export * from './serve.js'
 export * from './asr.js'
+export * from './subsession.js'
 export type { BundledDeps }
 
 const manifest = parseManifest(manifestYaml)
@@ -40,6 +42,19 @@ export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
     ...Object.fromEntries(
       Object.entries(imageGenExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
     ),
+    ...Object.fromEntries(
+      Object.entries(subsessionExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
+    ),
   }
-  return manifestConfig(manifest, { handlers })
+  const cfg = manifestConfig(manifest, { handlers })
+  // Lifecycle wiring is not produced by manifestConfig; declare the kinds here
+  // (the manifest's `lifecycle:` key documents the same list). The SDK's
+  // lifecycle subscription fires only when both `lifecycle` and `onLifecycle`
+  // are set. Deleting a session cascades to its subsessions (depth 1).
+  cfg.lifecycle = ['deleted']
+  cfg.onLifecycle = async (ev, tenant) => {
+    if (ev.kind !== 'deleted') return
+    await deleteSubsessions(deps, tenant ?? 'default', ev.session_name)
+  }
+  return cfg
 }

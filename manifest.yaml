@@ -1,5 +1,6 @@
 id: bundled
-version: 0.1.0
+version: 0.1.1
+lifecycle: [deleted]
 
 tools:
   # ---- memory / history / file / vision (from memory-extension) ----
@@ -350,6 +351,69 @@ tools:
             zh: 可选的音色 id（由提供商定义）。
       required: [text]
     required_config: [tts_model]
+
+  # ---- cross-session: subsession (O(1) fork child) + direct messaging ----
+  - name: subsession
+    description: >-
+      Start a subsession to work on a self-contained task in the background.
+      A subsession is an ordinary session forked from THIS one (zero-copy: it
+      shares this conversation's history and inherits its model/preset), so
+      give it a complete, self-contained prompt — it does not see this turn's
+      instructions. The subsession runs in the background and will send its
+      result back to this session as a new message. IMPORTANT: after calling
+      this tool you MUST end your turn immediately and wait for the result —
+      do NOT poll, sleep, or duplicate the subsession's work; you will be
+      resumed automatically when its message arrives.
+    descriptions:
+      zh: >-
+        启动一个 subsession 在后台处理一个自包含任务。subsession 是从本会话 fork 出的普通会话
+        （零拷贝：共享本会话历史，继承其模型/预设），因此请给它一个完整、自包含的提示词——它看不到
+        本轮对话中的指令。subsession 在后台运行，完成后会把结果作为一条新消息发回本会话。重要：调用
+        本工具后你必须立即结束本轮，等待结果——不要轮询、不要 sleep、不要重复它的工作；结果到达时会
+        自动恢复你。
+    input_schema:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: The complete, self-contained task for the subsession.
+          descriptions:
+            zh: 给 subsession 的完整、自包含任务描述。
+        description:
+          type: string
+          description: Optional short (3-5 words) label for the task.
+          descriptions:
+            zh: 可选的任务短标签（3-5 个词）。
+        name:
+          type: string
+          description: Optional explicit subsession name (default is auto-generated).
+          descriptions:
+            zh: 可选的显式 subsession 名称（默认自动生成）。
+      required: [prompt]
+
+  - name: session-send
+    description: >-
+      Send a message to another session in the same tenant, delivered to its
+      mailbox. The target resumes its turn on receipt (a user_prompt-style
+      delivery), which is how a subsession hands its result back to its parent.
+    descriptions:
+      zh: >-
+        向同租户内的另一个会话发送一条消息（投递到其 mailbox）。目标会话收到后将继续其回合
+        （以 user_prompt 方式投递），subsession 正是借此把结果发回父会话。
+    input_schema:
+      type: object
+      properties:
+        to:
+          type: string
+          description: Target session name.
+          descriptions:
+            zh: 目标会话名称。
+        text:
+          type: string
+          description: Message body to deliver.
+          descriptions:
+            zh: 要投递的消息内容。
+      required: [to, text]
 
 config:
   - name: asr_model

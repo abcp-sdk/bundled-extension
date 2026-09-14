@@ -44,6 +44,18 @@ export interface BundledDeps {
   rawAll: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>
   /** Raw SQL write (DDL / INSERT / UPDATE / DELETE). */
   rawRun: (sql: string, params?: unknown[]) => Promise<void>
+  /**
+   * Publish a durable mailbox message to a session. `type` is one of
+   * `user_prompt` (triggers a turn), `event` (folded into context only) or
+   * `interrupt`. Used by the subsession / session-send tools to hand work to
+   * another session and to wake a parent when a child finishes.
+   */
+  publishMailbox: (
+    tenant: string,
+    sessionName: string,
+    type: string,
+    payload: unknown,
+  ) => Promise<void>
   /** Read a stored file blob (meta + bytes) by `file:<code>`, tenant-scoped. */
   blobGet: (
     code: string,
