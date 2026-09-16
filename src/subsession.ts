@@ -124,28 +124,12 @@ export function subsessionExecutes(
   deps: BundledDeps,
 ): Record<string, ToolSpec['execute']> {
   /** The `group` of a session ('' = top-level). */
-  const groupOf = async (
-    tenant: string,
-    sid: string,
-  ): Promise<string> => {
-    const rows = await deps.rawAll(
-      `SELECT "group" FROM sessions WHERE tenant = ? AND name = ?`,
-      [tenant, sid],
-    )
-    return rows.length > 0 ? String(rows[0]!['group'] ?? '') : ''
-  }
+  const groupOf = (tenant: string, sid: string): Promise<string> =>
+    deps.sessionGroup(tenant, sid)
 
   /** Does a session exist in this tenant? */
-  const sessionExists = async (
-    tenant: string,
-    sid: string,
-  ): Promise<boolean> => {
-    const rows = await deps.rawAll(
-      `SELECT 1 AS x FROM sessions WHERE tenant = ? AND name = ? LIMIT 1`,
-      [tenant, sid],
-    )
-    return rows.length > 0
-  }
+  const sessionExists = (tenant: string, sid: string): Promise<boolean> =>
+    deps.sessionExists(tenant, sid)
 
   const subsession: ToolSpec['execute'] = async (
     args,
@@ -177,15 +161,7 @@ export function subsessionExecutes(
 
     // O(1) fork: copy every inheritable column from the parent, repoint tip_id
     // at the SAME tip (shared chain), and set group = parent name.
-    await deps.rawRun(
-      `INSERT INTO sessions
-         (tenant, name, model, variant, preset, tip_id, max_turns,
-          system_prompt, locale, "group", created_at, updated_at)
-       SELECT tenant, ?, model, variant, preset, tip_id, max_turns,
-              system_prompt, locale, ?, datetime('now'), datetime('now')
-       FROM sessions WHERE tenant = ? AND name = ?`,
-      [childName, sessionName, tenant, sessionName],
-    )
+    await deps.forkSession(tenant, sessionName, childName)
 
     // Hand the task to the child (wakes it) with a fork-context preamble so
     // the child understands the shared history belongs to the parent, then
@@ -236,20 +212,10 @@ export async function deleteSubsessions(
   tenant: string,
   parentName: string,
 ): Promise<void> {
-  const children = await deps.rawAll(
-    `SELECT name FROM sessions WHERE tenant = ? AND "group" = ?`,
-    [tenant, parentName],
-  )
-  for (const row of children) {
-    const child = String(row['name'] ?? '')
+  const children = await deps.sessionsInGroup(tenant, parentName)
+  for (const child of children) {
     if (child === '') continue
-    await deps.rawRun(
-      `DELETE FROM mailbox WHERE tenant = ? AND session_name = ?`,
-      [tenant, child],
-    )
-    await deps.rawRun(`DELETE FROM sessions WHERE tenant = ? AND name = ?`, [
-      tenant,
-      child,
-    ])
+    await deps.deleteSessionMailbox(tenant, child)
+    await deps.deleteSessionRow(tenant, child)
   }
 }

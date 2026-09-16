@@ -1,5 +1,21 @@
 import type { LanguageModel } from 'ai'
 
+/** One entry of a bounded chain walk (depth 0 = the tip). */
+export interface ChainEntry {
+  id: string
+  role: string
+  createdAt: string
+  depth: number
+}
+
+/** One persisted message part (raw JSON `data`, ordered by message + seq). */
+export interface MessagePartRow {
+  messageId: string
+  type: string
+  seq: number
+  data: string
+}
+
 /**
  * The injected runtime surface the bundled extension relies on. Kept
  * STRUCTURAL (no import of agent source) so the bundled extension is a
@@ -51,10 +67,51 @@ export interface BundledDeps {
     sessionName: string,
     name: string,
   ) => Promise<string | undefined>
-  /** Raw SQL read (positional `?` for sqlite). Returns plain row records. */
-  rawAll: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>
-  /** Raw SQL write (DDL / INSERT / UPDATE / DELETE). */
-  rawRun: (sql: string, params?: unknown[]) => Promise<void>
+  /**
+   * ---- Narrow data access over the HOST's stores ----
+   *
+   * The extension never speaks SQL: every operation it needs is a named,
+   * typed method implemented by the host (which owns the schema). This keeps
+   * the extension portable to any host that can serve these semantics —
+   * including a remote extension server over the bus.
+   */
+  /** Group key of a session ('' = top-level; '' when the session is absent). */
+  sessionGroup(tenant: string, sid: string): Promise<string>
+  /** Does the session exist in this tenant? */
+  sessionExists(tenant: string, sid: string): Promise<boolean>
+  /** The session's tip message id ('' when it has no messages / is absent). */
+  sessionTip(tenant: string, sid: string): Promise<string>
+  /** Names of every session whose group equals [group] (subsessions). */
+  sessionsInGroup(tenant: string, group: string): Promise<string[]>
+  /**
+   * O(1) fork: create [child] by copying [parent]'s inheritable columns,
+   * sharing its tip (same chain) and setting the child's group to the
+   * parent's name.
+   */
+  forkSession(tenant: string, parent: string, child: string): Promise<void>
+  /** Remove a session row (cascade delete of a subsession). */
+  deleteSessionRow(tenant: string, sid: string): Promise<void>
+  /** Remove a session's queued mailbox rows. */
+  deleteSessionMailbox(tenant: string, sid: string): Promise<void>
+  /** Bounded chain walk from a tip, oldest-first with depth 0 at the tip. */
+  messageChain(
+    tenant: string,
+    tip: string,
+    limit: number,
+  ): Promise<ChainEntry[]>
+  /** Ordered parts (message_id, seq order) for the given message ids. */
+  messageParts(
+    tenant: string,
+    ids: string[],
+  ): Promise<MessagePartRow[]>
+  /** Ensure the bundled todo table exists (idempotent). */
+  todosEnsure(): Promise<void>
+  /** Replace a session's todo rows wholesale. */
+  todosReplace(
+    tenant: string,
+    sid: string,
+    rows: Array<{ content: string; status: string; priority: string }>,
+  ): Promise<void>
   /**
    * Publish a durable mailbox message to a session. `type` is one of
    * `user_prompt` (triggers a turn), `event` (folded into context only) or

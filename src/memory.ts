@@ -28,78 +28,36 @@ function numArg(m: Record<string, unknown>, k: string, def: number): number {
 }
 
 /** The bundled extension's `todos` table, created idempotently in the agent DB. */
-const TODOS_DDL = `
-CREATE TABLE IF NOT EXISTS bundled_todos (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  tenant TEXT NOT NULL DEFAULT 'default',
-  session_id TEXT NOT NULL,
-  content TEXT NOT NULL,
-  status TEXT NOT NULL,
-  priority TEXT NOT NULL,
-  created_unix INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
-);
-CREATE INDEX IF NOT EXISTS idx_bundled_todos_session ON bundled_todos (tenant, session_id);
-`
 
 /** Build the memory/history/file/vision execute handlers bound to [deps]. */
 export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['execute']> {
   // Ensure the todos table exists (idempotent) at tool-set construction time.
-  void deps.rawRun(TODOS_DDL).catch(() => {})
+  void deps.todosEnsure().catch(() => {})
 
   const writeTodos = async (
     tenant: string,
     sid: string,
     todos: Record<string, unknown>[],
   ): Promise<number> => {
-    await deps.rawRun(
-      `DELETE FROM bundled_todos WHERE tenant = ? AND session_id = ?`,
-      [tenant, sid],
+    await deps.todosReplace(
+      tenant,
+      sid,
+      todos.map(t => ({
+        content: strArg(t, 'content'),
+        status: strArg(t, 'status') || 'pending',
+        priority: strArg(t, 'priority') || 'medium',
+      })),
     )
-    for (const t of todos) {
-      const content = strArg(t, 'content')
-      const status = strArg(t, 'status') || 'pending'
-      const priority = strArg(t, 'priority') || 'medium'
-      await deps.rawRun(
-        `INSERT INTO bundled_todos (tenant, session_id, content, status, priority) VALUES (?,?,?,?,?)`,
-        [tenant, sid, content, status, priority],
-      )
-    }
     return todos.length
   }
 
-  const sessionTip = async (tenant: string, sid: string): Promise<string> => {
-    const rows = await deps.rawAll(
-      `SELECT tip_id FROM sessions WHERE tenant = ? AND name = ?`,
-      [tenant, sid],
-    )
-    if (rows.length === 0) return ''
-    return String(rows[0]!['tip_id'] ?? '')
-  }
+  const sessionTip = (tenant: string, sid: string): Promise<string> =>
+    deps.sessionTip(tenant, sid)
 
-  const chainRaw = async (
-    tenant: string,
-    tip: string,
-    limit: number,
-  ): Promise<Array<{ id: string; role: string; created: string; depth: number }>> => {
-    const rows = await deps.rawAll(
-      `WITH RECURSIVE chain AS (
-         SELECT m.id, m.role, m.prev_id, m.created_at, 0 AS depth
-         FROM messages m WHERE m.id = ? AND m.tenant = ?
-         UNION ALL
-         SELECT m.id, m.role, m.prev_id, m.created_at, c.depth + 1
-         FROM messages m JOIN chain c ON m.id = c.prev_id
-         WHERE m.tenant = ?
-       )
-       SELECT id, role, created_at, depth FROM chain WHERE depth < ? ORDER BY depth ASC`,
-      [tip, tenant, tenant, limit],
+  const chainRaw = (tenant: string, tip: string, limit: number) =>
+    deps.messageChain(tenant, tip, limit).then(rows =>
+      rows.map(r => ({ id: r.id, role: r.role, created: r.createdAt, depth: r.depth })),
     )
-    return rows.map(r => ({
-      id: String(r['id'] ?? ''),
-      role: String(r['role'] ?? ''),
-      created: String(r['created_at'] ?? ''),
-      depth: Number(r['depth'] ?? 0),
-    }))
-  }
 
   const textPartsForMessages = async (
     tenant: string,
@@ -108,17 +66,12 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
   ): Promise<Map<string, string>> => {
     const out = new Map<string, string>()
     if (ids.length === 0) return out
-    const placeholders = ids.map(() => '?').join(',')
-    const rows = await deps.rawAll(
-      `SELECT message_id, data FROM parts WHERE tenant = ? AND message_id IN (${placeholders}) AND type = 'text'
-       ORDER BY message_id, seq`,
-      [tenant, ...ids],
-    )
+    const rows = await deps.messageParts(tenant, ids)
     for (const r of rows) {
-      const mid = String(r['message_id'] ?? '')
-      const data = String(r['data'] ?? '')
+      if (r.type !== 'text') continue
+      const mid = r.messageId
       try {
-        const v = JSON.parse(data) as { text?: string }
+        const v = JSON.parse(r.data) as { text?: string }
         const t = v.text ?? ''
         if (query !== '' && !t.toLowerCase().includes(query.toLowerCase())) continue
         out.set(mid, (out.get(mid) ?? '') + t)
@@ -135,17 +88,12 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
   ): Promise<Map<string, { name: string; changeID: string }[]>> => {
     const out = new Map<string, { name: string; changeID: string }[]>()
     if (ids.length === 0) return out
-    const placeholders = ids.map(() => '?').join(',')
-    const rows = await deps.rawAll(
-      `SELECT message_id, type, data FROM parts WHERE tenant = ? AND message_id IN (${placeholders}) ORDER BY message_id, seq`,
-      [tenant, ...ids],
-    )
+    const rows = await deps.messageParts(tenant, ids)
     for (const r of rows) {
-      const mid = String(r['message_id'] ?? '')
-      const typ = String(r['type'] ?? '')
-      const data = String(r['data'] ?? '')
+      const mid = r.messageId
+      const typ = r.type
       try {
-        const v = JSON.parse(data) as Record<string, unknown>
+        const v = JSON.parse(r.data) as Record<string, unknown>
         const item = { name: '', changeID: '' }
         if (typ === 'tool') item.name = strArg(v, 'name')
         else if (typ === 'tool_result') {
@@ -156,7 +104,7 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
         list.push(item)
         out.set(mid, list)
       } catch {
-        /* ignore */
+        /* ignore malformed */
       }
     }
     return out

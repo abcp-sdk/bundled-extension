@@ -44,11 +44,44 @@ function fixture() {
   `)
   const sent: Sent[] = []
   const deps = {
-    rawAll: async (sql: string, params: unknown[] = []) =>
-      db.prepare(sql).all(...(params as never[])) as Record<string, unknown>[],
-    rawRun: async (sql: string, params: unknown[] = []) => {
-      db.prepare(sql).run(...(params as never[]))
+    sessionGroup: async (tenant, sid) =>
+      String(
+        (
+          db
+            .prepare('SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?')
+            .all(tenant, sid) as Record<string, unknown>[]
+        )[0]?.['g'] ?? '',
+      ),
+    sessionExists: async (tenant, sid) =>
+      (
+        db
+          .prepare('SELECT 1 FROM sessions WHERE tenant = ? AND name = ?')
+          .all(tenant, sid) as Record<string, unknown>[]
+      ).length > 0,
+    forkSession: async (tenant, parent, child) => {
+      db.prepare(
+        `INSERT INTO sessions
+           (tenant, name, model, variant, preset, tip_id, max_turns,
+            system_prompt, locale, "group", created_at, updated_at)
+         SELECT tenant, ?, model, variant, preset, tip_id, max_turns,
+                system_prompt, locale, ?, datetime('now'), datetime('now')
+         FROM sessions WHERE tenant = ? AND name = ?`,
+      ).run(child, parent, tenant, parent)
     },
+    deleteSessionRow: async (tenant, sid) =>
+      void db
+        .prepare('DELETE FROM sessions WHERE tenant = ? AND name = ?')
+        .run(tenant, sid),
+    deleteSessionMailbox: async (tenant, sid) =>
+      void db
+        .prepare('DELETE FROM mailbox WHERE tenant = ? AND session_name = ?')
+        .run(tenant, sid),
+    sessionsInGroup: async (tenant, group) =>
+      (
+        db
+          .prepare('SELECT name AS n FROM sessions WHERE tenant = ? AND "group" = ?')
+          .all(tenant, group) as Record<string, unknown>[]
+      ).map(r => String(r['n'] ?? '')),
     publishMailbox: async (
       tenant: string,
       sessionName: string,
@@ -295,10 +328,32 @@ describe('subsession-create i18n', () => {
     ).run()
     const sent: Array<{ payload: unknown }> = []
     const deps = {
-      rawAll: async (sql: string, params: unknown[] = []) =>
-        db.prepare(sql).all(...(params as never[])),
-      rawRun: async (sql: string, params: unknown[] = []) =>
-        db.prepare(sql).run(...(params as never[])),
+      sessionGroup: async (_t: string, sid: string) =>
+        String(
+          (
+            db
+              .prepare('SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?')
+              .all('t', sid) as Record<string, unknown>[]
+          )[0]?.['g'] ?? '',
+        ),
+      sessionExists: async (_t: string, sid: string) =>
+        (
+          db
+            .prepare('SELECT 1 FROM sessions WHERE tenant = ? AND name = ?')
+            .all('t', sid) as Record<string, unknown>[]
+        ).length > 0,
+      forkSession: async (_t: string, parent: string, child: string) => {
+        db.prepare(
+          `INSERT INTO sessions (tenant, name, model, variant, preset, tip_id,
+             max_turns, system_prompt, locale, "group", created_at, updated_at)
+           SELECT tenant, ?, model, variant, preset, tip_id, max_turns,
+                  system_prompt, locale, ?, datetime('now'), datetime('now')
+           FROM sessions WHERE tenant = ? AND name = ?`,
+        ).run(child, parent, 't', parent)
+      },
+      deleteSessionRow: async () => {},
+      deleteSessionMailbox: async () => {},
+      sessionsInGroup: async () => [],
       publishMailbox: async (_t: string, _s: string, _ty: string, p: unknown) =>
         sent.push({ payload: p }),
       // The agent projects this session's locale as vars.agent.<sid>.locale.
@@ -337,10 +392,32 @@ describe('subsession handoff fork-context preamble', () => {
     ).run()
     const sent: Array<{ payload: unknown }> = []
     const deps = {
-      rawAll: async (sql: string, params: unknown[] = []) =>
-        db.prepare(sql).all(...(params as never[])),
-      rawRun: async (sql: string, params: unknown[] = []) =>
-        db.prepare(sql).run(...(params as never[])),
+      sessionGroup: async (_t: string, sid: string) =>
+        String(
+          (
+            db
+              .prepare('SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?')
+              .all('t', sid) as Record<string, unknown>[]
+          )[0]?.['g'] ?? '',
+        ),
+      sessionExists: async (_t: string, sid: string) =>
+        (
+          db
+            .prepare('SELECT 1 FROM sessions WHERE tenant = ? AND name = ?')
+            .all('t', sid) as Record<string, unknown>[]
+        ).length > 0,
+      forkSession: async (_t: string, parent: string, child: string) => {
+        db.prepare(
+          `INSERT INTO sessions (tenant, name, model, variant, preset, tip_id,
+             max_turns, system_prompt, locale, "group", created_at, updated_at)
+           SELECT tenant, ?, model, variant, preset, tip_id, max_turns,
+                  system_prompt, locale, ?, datetime('now'), datetime('now')
+           FROM sessions WHERE tenant = ? AND name = ?`,
+        ).run(child, parent, 't', parent)
+      },
+      deleteSessionRow: async () => {},
+      deleteSessionMailbox: async () => {},
+      sessionsInGroup: async () => [],
       publishMailbox: async (_t: string, _s: string, _ty: string, p: unknown) =>
         sent.push({ payload: p }),
       getSessionVariable: async () => undefined,
