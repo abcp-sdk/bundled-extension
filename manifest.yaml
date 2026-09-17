@@ -143,20 +143,20 @@ tools:
           descriptions:
             zh: 关于图像的问题（默认：详细描述该图像）。
       required: [code]
-    required_config: [vlm_model]
+    required_config: [model.text]
 
   # ---- audio-transcribe (ASR) ----
   - name: audio-transcribe
     description: >-
       Transcribe a previously uploaded audio file referenced as file:<code> to
-      text, using the configured transcription model (config `asr_model`, a
+      text, using the configured transcription model (config `model.transcription`, a
       provider_id/model_id registered on the agent with
       capability=transcription, e.g. the easylab gateway's qwen3-asr). Pass an
       optional language hint (ISO 639-1, e.g. zh / en).
     descriptions:
       zh: >-
         将以 file:<code> 引用的已上传音频文件转写为文字，使用已配置的转写模型（配置
-        asr_model，为 agent 上注册的 capability=transcription 的
+        model.transcription，为 agent 上注册的 capability=transcription 的
         provider_id/model_id，如 easylab 网关的 qwen3-asr）。可选传语言提示
         （ISO 639-1，如 zh / en）。
     input_schema:
@@ -173,7 +173,7 @@ tools:
           descriptions:
             zh: "可选语言提示（ISO 639-1，如 zh、en）。留空自动检测。"
       required: [code]
-    required_config: [asr_model]
+    required_config: [model.transcription]
 
   # ---- web-fetch ----
   - name: web-fetch
@@ -240,11 +240,11 @@ tools:
   - name: image-generate
     description: >-
       Generate an image from a natural-language prompt using the configured image
-      model (config `image_model`, a provider_id/model_id registered on the agent
+      model (config `model.image`, a provider_id/model_id registered on the agent
       with capability=image). The result is stored and referenced as file:<code>.
     descriptions:
       zh: >-
-        使用已配置的图像模型（配置 image_model，为 agent 上注册的 capability=image 的
+        使用已配置的图像模型（配置 model.image，为 agent 上注册的 capability=image 的
         provider_id/model_id）根据自然语言提示生成图像。结果会存储为 file:<code>。
     input_schema:
       type: object
@@ -265,17 +265,17 @@ tools:
           descriptions:
             zh: 生成的图像数量（默认 1）。
       required: [prompt]
-    required_config: [image_model]
+    required_config: [model.image]
 
   - name: image-edit
     description: >-
       Edit an image (referenced by file:<code>) using the configured image-edit
-      model (config `image_edit_model`, a provider_id/model_id with
+      model (config `model.image_edit`, a provider_id/model_id with
       capability=image), given a natural-language instruction. The result is
       stored and referenced as file:<code>.
     descriptions:
       zh: >-
-        使用已配置的图像编辑模型（配置 image_edit_model，capability=image 的
+        使用已配置的图像编辑模型（配置 model.image_edit，capability=image 的
         provider_id/model_id）编辑以 file:<code> 引用的图像，给定一条自然语言指令。
         结果会存储为 file:<code>。
     input_schema:
@@ -292,17 +292,17 @@ tools:
           descriptions:
             zh: 应用到图像的编辑指令。
       required: [code, prompt]
-    required_config: [image_edit_model]
+    required_config: [model.image_edit]
 
   - name: video-generate
     description: >-
       Generate a short video from a natural-language prompt using the configured
-      video model (config `video_model`, a provider_id/model_id registered on the
+      video model (config `model.video`, a provider_id/model_id registered on the
       agent with capability=video, e.g. Google Veo). The result is stored and
       referenced as file:<code>.
     descriptions:
       zh: >-
-        使用已配置的视频模型（配置 video_model，为 agent 上注册的 capability=video 的
+        使用已配置的视频模型（配置 model.video，为 agent 上注册的 capability=video 的
         provider_id/model_id，如 Google Veo）根据自然语言提示生成短视频。结果会存储为 file:<code>。
     input_schema:
       type: object
@@ -325,16 +325,16 @@ tools:
           descriptions:
             zh: 视频分辨率。
       required: [prompt]
-    required_config: [video_model]
+    required_config: [model.video]
 
   - name: tts-generate
     description: >-
       Synthesize speech audio from text using the configured TTS model (config
-      `tts_model`, a provider_id/model_id registered on the agent with
+      `model.speech`, a provider_id/model_id registered on the agent with
       capability=speech). The result is stored and referenced as file:<code>.
     descriptions:
       zh: >-
-        使用已配置的语音合成模型（配置 tts_model，为 agent 上注册的 capability=speech 的
+        使用已配置的语音合成模型（配置 model.speech，为 agent 上注册的 capability=speech 的
         provider_id/model_id）把文本合成为语音。结果会存储为 file:<code>。
     input_schema:
       type: object
@@ -350,7 +350,7 @@ tools:
           descriptions:
             zh: 可选的音色 id（由提供商定义）。
       required: [text]
-    required_config: [tts_model]
+    required_config: [model.speech]
 
   # ---- cross-session: subsession (O(1) fork child) + direct messaging ----
   - name: subsession-create
@@ -416,27 +416,20 @@ tools:
       required: [to, text]
 
 config:
-  - name: asr_model
-    description: >-
-      Transcription model ref (provider_id/model_id, capability=transcription)
-      used by audio-transcribe. Register the model on the agent first (e.g.
-      the easylab gateway's qwen3-asr via an openai provider).
+  # Model-reference knobs. `kind: model` + `capability` let the UI render a
+  # picker scoped to the registered modality instead of a free-form text field
+  # (no variable-name heuristics). Each knob resolves at runtime via
+  # resolveGenerative(capability, value).
+  - name: model.text
+    description: Vision-capable TEXT model ref (provider_id/model_id) used by image-read.
     descriptions:
-      zh: >-
-        audio-transcribe 使用的转写模型引用（provider_id/model_id，
-        capability=transcription）。请先在 agent 上注册该模型（如通过 openai
-        provider 注册 easylab 网关的 qwen3-asr）。
+      zh: "image-read 使用的视觉文本模型引用（provider_id/model_id，capability=text）。"
     type: string
+    kind: model
+    capability: text
     scope: global
     default: ''
-  - name: vlm_model
-    description: Vision model ref (provider_id/model_id) used by image-read.
-    descriptions:
-      zh: "image-read 使用的视觉模型引用（provider_id/model_id）。"
-    type: string
-    scope: global
-    default: ''
-  - name: image_model
+  - name: model.image
     description: >-
       Image model ref (provider_id/model_id, capability=image) used by
       image-generate. Register the model on the agent first.
@@ -445,9 +438,11 @@ config:
         image-generate 使用的图像模型引用（provider_id/model_id，capability=image）。
         请先在 agent 上注册该模型。
     type: string
+    kind: model
+    capability: image
     scope: global
     default: ''
-  - name: image_edit_model
+  - name: model.image_edit
     description: >-
       Image model ref (provider_id/model_id, capability=image) used by
       image-edit. Register the model on the agent first.
@@ -456,9 +451,11 @@ config:
         image-edit 使用的图像模型引用（provider_id/model_id，capability=image）。
         请先在 agent 上注册该模型。
     type: string
+    kind: model
+    capability: image
     scope: global
     default: ''
-  - name: video_model
+  - name: model.video
     description: >-
       Video model ref (provider_id/model_id, capability=video) used by
       video-generate. Register the model on the agent first.
@@ -467,9 +464,11 @@ config:
         video-generate 使用的视频模型引用（provider_id/model_id，capability=video）。
         请先在 agent 上注册该模型。
     type: string
+    kind: model
+    capability: video
     scope: global
     default: ''
-  - name: tts_model
+  - name: model.speech
     description: >-
       Speech model ref (provider_id/model_id, capability=speech) used by
       tts-generate. Register the model on the agent first.
@@ -478,8 +477,24 @@ config:
         tts-generate 使用的语音模型引用（provider_id/model_id，capability=speech）。
         请先在 agent 上注册该模型。
     type: string
+    kind: model
+    capability: speech
     scope: global
     default: ''
+  - name: model.transcription
+    description: >-
+      Transcription model ref (provider_id/model_id, capability=transcription)
+      used by audio-transcribe. Register the model on the agent first.
+    descriptions:
+      zh: >-
+        audio-transcribe 使用的转写模型引用（provider_id/model_id，
+        capability=transcription）。请先在 agent 上注册该模型。
+    type: string
+    kind: model
+    capability: transcription
+    scope: global
+    default: ''
+
   - name: brave_api_key
     description: Brave Search API key (X-Subscription-Token) for brave-search.
     descriptions:

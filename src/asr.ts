@@ -1,7 +1,7 @@
 /**
  * audio-transcribe tool handler: transcribe a stored audio file
  * (file:<code>) to text. The model comes from the AGENT PROVIDER REGISTRY —
- * the `asr_model` config knob holds a canonical `provider_id/model_id` ref
+ * the `model.transcription` config knob holds a canonical `provider_id/model_id` ref
  * (capability=transcription), resolved through the injected
  * `deps.resolveGenerative` and driven with the AI SDK `transcribe()`.
  */
@@ -27,16 +27,16 @@ export const audioTranscribeExecute =
       throw new Error(`file ${code} is not audio (${mime || 'unknown mime'})`)
     }
     const ref = String(
-      (await deps.resolveConfig('asr_model', sessionName, tenant)) ?? '',
+      (await deps.resolveConfig('model.transcription', sessionName, tenant)) ?? '',
     ).trim()
     if (ref === '') {
       throw new Error(
-        'asr_model not configured — set it to a transcription model registered on the agent (provider_id/model_id, capability=transcription)',
+        'model.transcription not configured — set it to a transcription model registered on the agent (provider_id/model_id, capability=transcription)',
       )
     }
     const resolved = await deps.resolveGenerative('transcription', ref, tenant)
     if (resolved.isErr()) {
-      throw new Error(`asr_model: ${resolved.error ?? 'model not found'}`)
+      throw new Error(`model.transcription: ${resolved.error ?? 'model not found'}`)
     }
     const { model, modelId } = resolved.value!
     const blob = await deps.blobGet(code, tenant)

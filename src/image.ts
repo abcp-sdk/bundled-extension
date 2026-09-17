@@ -5,7 +5,7 @@
  *
  * All generation models come from the AGENT PROVIDER REGISTRY through the
  * injected `resolveGenerative(capability, ref)`: the config knobs
- * (`image_model` / `image_edit_model` / `video_model` / `tts_model`) hold a
+ * (`model.image` / `model.image_edit` / `model.video` / `model.speech`) hold a
  * canonical `provider_id/model_id` ref — NOT a bare model name and NOT a
  * separate base-url/key pair. One endpoint, one key, capability-tagged.
  */
@@ -85,7 +85,7 @@ export function imageGenExecutes(
       deps,
       sessionName ?? '',
       tenant,
-      'image_model',
+      'model.image',
       'image',
     )
     const { generateImage } = await import('ai')
@@ -122,7 +122,7 @@ export function imageGenExecutes(
       deps,
       sessionName ?? '',
       tenant,
-      'image_edit_model',
+      'model.image_edit',
       'image',
     )
     const blob = await deps.blobGet(code, tenant)
@@ -158,7 +158,7 @@ export function imageGenExecutes(
       deps,
       sessionName ?? '',
       tenant,
-      'video_model',
+      'model.video',
       'video',
     )
     const { experimental_generateVideo } = await import('ai')
@@ -203,7 +203,7 @@ export function imageGenExecutes(
       deps,
       sessionName ?? '',
       tenant,
-      'tts_model',
+      'model.speech',
       'speech',
     )
     const { generateSpeech } = await import('ai')

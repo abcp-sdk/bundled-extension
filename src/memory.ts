@@ -184,8 +184,8 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     imageDataUrl: string,
     tenant: string,
   ): Promise<string> => {
-    const modelId = String(await deps.resolveConfig('vlm_model', undefined, tenant) ?? '')
-    if (modelId === '') throw new Error('vlm_model not configured: set a vision model first')
+    const modelId = String(await deps.resolveConfig('model.text', undefined, tenant) ?? '')
+    if (modelId === '') throw new Error('model.text not configured: set a vision model first')
     const resolved = await deps.resolveModel(null as never, modelId, tenant)
     if (resolved.isErr()) throw new Error(resolved.error ?? 'vision model not found')
     const model = resolved.value!.model
@@ -223,7 +223,7 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     return {
       content: text,
       data: {
-        model: String(await deps.resolveConfig('vlm_model', undefined, tenant) ?? ''),
+        model: String(await deps.resolveConfig('model.text', undefined, tenant) ?? ''),
         code,
         mime,
         size: Number(meta['size'] ?? 0),
