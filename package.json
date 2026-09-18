@@ -21,7 +21,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@abc-protocol/sdk": "file:../abc-protocol-typescript",
+    "@abc-protocol/sdk": "github:abcp-sdk/abc-protocol-typescript#9bdc70d75415548f0ace37b1b187b1112c46f25e",
     "@ai-sdk/openai-compatible": "^3.0.34",
     "@types/turndown": "^5.0.5",
     "ai": "^7.0.73",
