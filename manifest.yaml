@@ -324,6 +324,26 @@ tools:
           description: Resolution of the video.
           descriptions:
             zh: 视频分辨率。
+        first_frame_code:
+          type: string
+          description: >-
+            Optional file code (the 16-char segment after file:) of an IMAGE to
+            use as the video's first frame (image-to-video). Must be an image
+            file — any other media type fails.
+          descriptions:
+            zh: >-
+              可选的图片文件编码（file: 之后的 16 字符部分），作为视频首帧（图生视频）。
+              必须是图片文件，其他类型会报错。
+        last_frame_code:
+          type: string
+          description: >-
+            Optional file code (the 16-char segment after file:) of an IMAGE to
+            use as the video's last frame (first-last-frame generation). Must be
+            an image file — any other media type fails.
+          descriptions:
+            zh: >-
+              可选的图片文件编码（file: 之后的 16 字符部分），作为视频末帧（首末帧生成）。
+              必须是图片文件，其他类型会报错。
       required: [prompt]
     required_config: [model.video]
 

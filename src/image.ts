@@ -155,6 +155,35 @@ export function imageGenExecutes(
   ) => {
     const prompt = strArg(args, 'prompt')
     if (prompt.trim() === '') throw new Error('prompt is required')
+    // Optional first / last frames: stored images (file:<code>) that seed the
+    // video. Only IMAGES are accepted — anything else fails loudly rather than
+    // being silently dropped by the provider. `frameImages` is the v4 standard
+    // field (`VideoModelV4FrameImage` with `frameType` first_frame|last_frame).
+    const firstFrameCode = strArg(args, 'first_frame_code').trim()
+    const lastFrameCode = strArg(args, 'last_frame_code').trim()
+    const loadFrame = async (
+      code: string,
+      frameType: 'first_frame' | 'last_frame',
+    ): Promise<{ image: string; frameType: 'first_frame' | 'last_frame' } | null> => {
+      if (code === '') return null
+      const blob = await deps.blobGet(code, tenant)
+      const mime = String(blob.meta['mime'] ?? '')
+      if (!mime.startsWith('image/')) {
+        throw new Error(
+          `${frameType} file ${code} is not an image (${mime || 'unknown mime'}) — the ${frameType.replace('_', ' ')} must be an image file`,
+        )
+      }
+      return {
+        image: `data:${mime};base64,${Buffer.from(blob.data).toString('base64')}`,
+        frameType,
+      }
+    }
+    const frames = (
+      await Promise.all([
+        loadFrame(firstFrameCode, 'first_frame'),
+        loadFrame(lastFrameCode, 'last_frame'),
+      ])
+    ).filter((f): f is { image: string; frameType: 'first_frame' | 'last_frame' } => f !== null)
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
@@ -171,6 +200,7 @@ export function imageGenExecutes(
       prompt,
       ...(aspect.trim() === '' ? {} : { aspectRatio: aspect as `${number}:${number}` }),
       ...(resolution.trim() === '' ? {} : { resolution: resolution as `${number}p` }),
+      ...(frames.length === 0 ? {} : { frameImages: frames }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     const stored = await storeMedia(
@@ -182,12 +212,23 @@ export function imageGenExecutes(
         mediaType: v.mediaType ?? 'video/mp4',
       })),
     )
+    const frameNote = [
+      firstFrameCode === '' ? '' : `first frame file:${firstFrameCode}`,
+      lastFrameCode === '' ? '' : `last frame file:${lastFrameCode}`,
+    ].filter(s => s !== '')
     return {
       content: [
-        `Generated ${stored.length} video(s) with ${modelId}.`,
+        `Generated ${stored.length} video(s) with ${modelId}${
+          frameNote.length === 0 ? '' : ` (${frameNote.join(', ')})`
+        }.`,
         ...stored.map(s => `file:${s.code} (${s.mime}, ${s.bytes} bytes)`),
       ].join('\n'),
-      data: { videos: stored, model: modelId },
+      data: {
+        videos: stored,
+        model: modelId,
+        ...(firstFrameCode === '' ? {} : { first_frame: firstFrameCode }),
+        ...(lastFrameCode === '' ? {} : { last_frame: lastFrameCode }),
+      },
     }
   }
 
