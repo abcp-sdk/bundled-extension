@@ -329,13 +329,15 @@ tools:
 
   - name: tts-generate
     description: >-
-      Synthesize speech audio from text using the configured TTS model (config
-      `model.speech`, a provider_id/model_id registered on the agent with
-      capability=speech). The result is stored and referenced as file:<code>.
+      Synthesize speech audio from text using the configured preset-voice TTS
+      model (config `model.speech`, a provider_id/model_id registered on the
+      agent with capability=speech). The provider's default preset voice is
+      used. The result is stored and referenced as file:<code>.
     descriptions:
       zh: >-
-        使用已配置的语音合成模型（配置 model.speech，为 agent 上注册的 capability=speech 的
-        provider_id/model_id）把文本合成为语音。结果会存储为 file:<code>。
+        使用已配置的预置音色语音合成模型（配置 model.speech，为 agent 上注册的
+        capability=speech 的 provider_id/model_id）把文本合成为语音，使用提供商默认的预置音色。
+        结果会存储为 file:<code>。
     input_schema:
       type: object
       properties:
@@ -344,13 +346,42 @@ tools:
           description: The text to synthesize.
           descriptions:
             zh: 要合成为语音的文本。
-        voice:
-          type: string
-          description: Optional voice id (provider-specific).
-          descriptions:
-            zh: 可选的音色 id（由提供商定义）。
       required: [text]
     required_config: [model.speech]
+
+  - name: tts-clone
+    description: >-
+      Synthesize speech from text while CLONING the voice from a reference audio
+      clip. Uses the configured voice-cloning TTS model (config
+      `model.speech_clone`, a provider_id/model_id registered on the agent with
+      capability=speech). The reference clip is a stored audio file (pass its
+      file:<code>); `ref_text` is the clip's transcript when known. The result
+      is stored and referenced as file:<code>.
+    descriptions:
+      zh: >-
+        使用已配置的语音克隆模型（配置 model.speech_clone，为 agent 上注册的 capability=speech
+        的 provider_id/model_id），参照一段参考音频克隆音色并把文本合成为语音。参考音频是已存储的音频文件
+        （传入其 file:<code>）；ref_text 为参考音频的文本（已知时填写）。结果会存储为 file:<code>。
+    input_schema:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The text to synthesize.
+          descriptions:
+            zh: 要合成为语音的文本。
+        code:
+          type: string
+          description: "The reference audio file code (the 16-char segment after file:)."
+          descriptions:
+            zh: "参考音频的文件编码（file: 之后的 16 字符部分）。"
+        ref_text:
+          type: string
+          description: Optional transcript of the reference audio clip.
+          descriptions:
+            zh: 可选的参考音频文本（参考音频所说内容的转写）。
+      required: [text, code]
+    required_config: [model.speech_clone]
 
   # ---- cross-session: subsession (O(1) fork child) + direct messaging ----
   - name: subsession-create
@@ -470,11 +501,24 @@ config:
     default: ''
   - name: model.speech
     description: >-
-      Speech model ref (provider_id/model_id, capability=speech) used by
-      tts-generate. Register the model on the agent first.
+      Preset-voice speech model ref (provider_id/model_id, capability=speech)
+      used by tts-generate. Register the model on the agent first.
     descriptions:
       zh: >-
-        tts-generate 使用的语音模型引用（provider_id/model_id，capability=speech）。
+        tts-generate 使用的预置音色语音模型引用（provider_id/model_id，capability=speech）。
+        请先在 agent 上注册该模型。
+    type: string
+    kind: model
+    capability: speech
+    scope: global
+    default: ''
+  - name: model.speech_clone
+    description: >-
+      Voice-cloning speech model ref (provider_id/model_id, capability=speech)
+      used by tts-clone. Register the model on the agent first.
+    descriptions:
+      zh: >-
+        tts-clone 使用的语音克隆模型引用（provider_id/model_id，capability=speech）。
         请先在 agent 上注册该模型。
     type: string
     kind: model

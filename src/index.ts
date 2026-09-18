@@ -13,6 +13,7 @@ import manifestYaml from '../manifest.yaml'
 import { webFetchExecute } from './webfetch.js'
 import { braveSearchExecute } from './brave-search.js'
 import { imageGenExecutes } from './image.js'
+import { speechExecutes } from './speech.js'
 import { audioTranscribeExecute } from './asr.js'
 import { memoryExecutes } from './memory.js'
 import { deleteSubsessions, subsessionExecutes } from './subsession.js'
@@ -41,6 +42,9 @@ export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
     'audio-transcribe': { execute: audioTranscribeExecute(deps) },
     ...Object.fromEntries(
       Object.entries(imageGenExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(speechExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
     ),
     ...Object.fromEntries(
       Object.entries(subsessionExecutes(deps)).map(([k, v]) => [k, { execute: v }]),

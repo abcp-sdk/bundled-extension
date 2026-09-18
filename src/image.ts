@@ -1,11 +1,12 @@
 /**
- * image-generate / image-edit / video-generate / tts-generate tool handlers.
+ * image-generate / image-edit / video-generate tool handlers.
+ * Speech synthesis lives in speech.ts (tts-generate / tts-clone).
  * Descriptions/schemas are declared in manifest.yaml (with `descriptions.zh`);
  * this module exposes the execute handlers only (deps captured via factory).
  *
  * All generation models come from the AGENT PROVIDER REGISTRY through the
  * injected `resolveGenerative(capability, ref)`: the config knobs
- * (`model.image` / `model.image_edit` / `model.video` / `model.speech`) hold a
+ * (`model.image` / `model.image_edit` / `model.video`) hold a
  * canonical `provider_id/model_id` ref — NOT a bare model name and NOT a
  * separate base-url/key pair. One endpoint, one key, capability-tagged.
  */
@@ -19,7 +20,7 @@ function strArg(m: Record<string, unknown>, k: string): string {
 }
 
 /** Resolve a generation model from a config knob holding a provider/model ref. */
-async function generativeFromConfig(
+export async function generativeFromConfig(
   deps: BundledDeps,
   sessionName: string,
   tenant: string,
@@ -43,7 +44,7 @@ async function generativeFromConfig(
 }
 
 /** Store generated media bytes in the agent blob store, returning file refs. */
-async function storeMedia(
+export async function storeMedia(
   deps: BundledDeps,
   sessionName: string,
   tenant: string,
@@ -190,47 +191,9 @@ export function imageGenExecutes(
     }
   }
 
-  const ttsGenerate: ToolSpec['execute'] = async (
-    args,
-    _callId,
-    sessionName,
-    _signal,
-    tenant = '',
-  ) => {
-    const text = strArg(args, 'text')
-    if (text.trim() === '') throw new Error('text is required')
-    const { model, modelId } = await generativeFromConfig(
-      deps,
-      sessionName ?? '',
-      tenant,
-      'model.speech',
-      'speech',
-    )
-    const { generateSpeech } = await import('ai')
-    const voice = strArg(args, 'voice')
-    const res = await generateSpeech({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: model as any,
-      text,
-      ...(voice.trim() === '' ? {} : { voice }),
-    })
-    const mime = res.audio.mediaType ?? 'audio/mpeg'
-    const stored = await storeMedia(
-      deps,
-      sessionName ?? '',
-      tenant,
-      [{ uint8Array: res.audio.uint8Array, mediaType: mime }],
-    )
-    return {
-      content: `Synthesized ${Math.round(res.audio.uint8Array.length / 1024)} KiB ${mime} with ${modelId}: file:${stored[0]?.code}`,
-      data: { audio: stored[0], model: modelId },
-    }
-  }
-
   return {
     'image-generate': imageGenerate,
     'image-edit': imageEdit,
     'video-generate': videoGenerate,
-    'tts-generate': ttsGenerate,
   }
 }
