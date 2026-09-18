@@ -151,13 +151,13 @@ tools:
       Transcribe a previously uploaded audio file referenced as file:<code> to
       text, using the configured transcription model (config `model.transcription`, a
       provider_id/model_id registered on the agent with
-      capability=transcription, e.g. the easylab gateway's qwen3-asr). Pass an
+      capability=transcription, e.g. the abcp gateway's qwen3-asr). Pass an
       optional language hint (ISO 639-1, e.g. zh / en).
     descriptions:
       zh: >-
         将以 file:<code> 引用的已上传音频文件转写为文字，使用已配置的转写模型（配置
         model.transcription，为 agent 上注册的 capability=transcription 的
-        provider_id/model_id，如 easylab 网关的 qwen3-asr）。可选传语言提示
+        provider_id/model_id，如 abcp 网关的 qwen3-asr）。可选传语言提示
         （ISO 639-1，如 zh / en）。
     input_schema:
       type: object
