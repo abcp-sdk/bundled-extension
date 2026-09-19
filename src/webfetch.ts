@@ -8,6 +8,8 @@
 import { parseDocument } from 'htmlparser2'
 import TurndownService from 'turndown'
 import type { ToolSpec } from '@abc-protocol/sdk'
+import type { BundledDeps } from './deps.js'
+import { localeOf, tr } from './i18n.js'
 
 export const WEB_FETCH_MAX_BYTES = 5 * 1024 * 1024
 export const WEB_FETCH_DEFAULT_TIMEOUT_SECONDS = 30
@@ -89,10 +91,10 @@ const convert = (content: string, contentType: string, format: Format): string =
 }
 
 /** Fetch a single byte stream (bounded) then decode per format. */
-async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number): Promise<{ url: string; contentType: string; format: Format; output: string }> {
+async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number, locale: string): Promise<{ url: string; contentType: string; format: Format; output: string }> {
   const url = new URL(rawUrl)
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error('URL must use http:// or https://')
+    throw new Error(tr(locale, 'fetchUrlScheme'))
   }
   if (timeoutSeconds <= 0 || timeoutSeconds > WEB_FETCH_MAX_TIMEOUT_SECONDS) {
     timeoutSeconds = WEB_FETCH_DEFAULT_TIMEOUT_SECONDS
@@ -112,14 +114,14 @@ async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number):
       const contentType = res.headers.get('content-type') ?? ''
       const mime = mimeFrom(contentType)
       if (isImageAttachment(mime)) {
-        throw new Error(`Unsupported fetched image content type: ${mime}`)
+        throw new Error(tr(locale, 'fetchUnsupportedImage', { mime }))
       }
       if (!isTextualMime(mime)) {
-        throw new Error(`Unsupported fetched file content type: ${mime}`)
+        throw new Error(tr(locale, 'fetchUnsupportedFile', { mime }))
       }
       const buf = Buffer.from(await res.arrayBuffer())
       if (buf.length > WEB_FETCH_MAX_BYTES) {
-        throw new Error(`Response too large (exceeds ${WEB_FETCH_MAX_BYTES} byte limit)`)
+        throw new Error(tr(locale, 'fetchTooLarge', { bytes: WEB_FETCH_MAX_BYTES }))
       }
       return { contentType, buf }
     } finally {
@@ -143,12 +145,15 @@ async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number):
   return { url: rawUrl, contentType: fetched.contentType, format, output }
 }
 
-/** web-fetch execute handler (description/schema from manifest.yaml). */
-export const webFetchExecute: ToolSpec['execute'] = async (args) => {
-  const rawUrl = String(args['url'] ?? '')
-  if (rawUrl === '') throw new Error('url is required')
-  const format = (args['format'] as Format) ?? 'markdown'
-  const timeout = Number(args['timeout'] ?? 0)
-  const out = await fetchUrl(rawUrl, format, timeout)
-  return { content: out.output, data: { url: out.url, contentType: out.contentType, format: out.format } }
-}
+/** web-fetch execute handler factory (description/schema from manifest.yaml). */
+export const webFetchExecute =
+  (deps: BundledDeps): ToolSpec['execute'] =>
+  async (args, _callId, sessionName, _signal, tenant = '') => {
+    const locale = await localeOf(deps, tenant, sessionName ?? '')
+    const rawUrl = String(args['url'] ?? '')
+    if (rawUrl === '') throw new Error(tr(locale, 'urlRequired'))
+    const format = (args['format'] as Format) ?? 'markdown'
+    const timeout = Number(args['timeout'] ?? 0)
+    const out = await fetchUrl(rawUrl, format, timeout, locale)
+    return { content: out.output, data: { url: out.url, contentType: out.contentType, format: out.format } }
+  }

@@ -13,6 +13,7 @@
 
 import type { ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
+import { localeOf, tr } from './i18n.js'
 
 function strArg(m: Record<string, unknown>, k: string): string {
   const v = m[k]
@@ -26,18 +27,24 @@ export async function generativeFromConfig(
   tenant: string,
   modelCfg: string,
   capability: 'image' | 'video' | 'speech',
+  locale = 'en',
 ): Promise<{ model: unknown; modelId: string; providerId: string }> {
   const ref = String(
     (await deps.resolveConfig(modelCfg, sessionName, tenant)) ?? '',
   ).trim()
   if (ref === '') {
     throw new Error(
-      `${modelCfg} not configured — set it to a ${capability} model registered on the agent (provider_id/model_id)`,
+      tr(locale, 'modelNotConfigured', { cfg: modelCfg, capability }),
     )
   }
   const resolved = await deps.resolveGenerative(capability, ref, tenant)
   if (resolved.isErr()) {
-    throw new Error(`${modelCfg}: ${resolved.error ?? 'model not found'}`)
+    throw new Error(
+      tr(locale, 'modelResolveFailed', {
+        cfg: modelCfg,
+        error: resolved.error ?? tr(locale, 'modelNotFound'),
+      }),
+    )
   }
   const v = resolved.value!
   return { model: v.model, modelId: v.modelId, providerId: v.providerId }
@@ -95,13 +102,15 @@ export function imageGenExecutes(
     tenant = '',
   ) => {
     const prompt = strArg(args, 'prompt')
-    if (prompt.trim() === '') throw new Error('prompt is required')
+    const locale = await localeOf(deps, tenant, sessionName ?? '')
+    if (prompt.trim() === '') throw new Error(tr(locale, 'promptRequired'))
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
       tenant,
       'model.image',
       'image',
+      locale,
     )
     const { generateImage } = await import('ai')
     const size = strArg(args, 'size')
@@ -115,8 +124,10 @@ export function imageGenExecutes(
     const stored = await storeMedia(deps, sessionName ?? '', tenant, 'image', res.images)
     return {
       content: [
-        `Generated ${stored.length} image(s) with ${modelId}.`,
-        ...stored.map(s => `file:${s.code} (${s.mime}, ${s.bytes} bytes)`),
+        tr(locale, 'generatedImages', { n: stored.length, model: modelId }),
+        ...stored.map(s =>
+          tr(locale, 'fileLine', { code: s.code, mime: s.mime, bytes: s.bytes }),
+        ),
       ].join('\n'),
       data: { files: stored, model: modelId },
     }
@@ -131,14 +142,16 @@ export function imageGenExecutes(
   ) => {
     const code = strArg(args, 'code')
     const prompt = strArg(args, 'prompt')
-    if (code === '') throw new Error('code is required')
-    if (prompt.trim() === '') throw new Error('prompt is required')
+    const locale = await localeOf(deps, tenant, sessionName ?? '')
+    if (code === '') throw new Error(tr(locale, 'codeRequired'))
+    if (prompt.trim() === '') throw new Error(tr(locale, 'promptRequired'))
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
       tenant,
       'model.image_edit',
       'image',
+      locale,
     )
     const blob = await deps.blobGet(code, tenant)
     const { generateImage } = await import('ai')
@@ -153,8 +166,10 @@ export function imageGenExecutes(
     const stored = await storeMedia(deps, sessionName ?? '', tenant, 'image', res.images)
     return {
       content: [
-        `Edited ${stored.length} image(s) from file:${code} with ${modelId}.`,
-        ...stored.map(s => `file:${s.code} (${s.mime}, ${s.bytes} bytes)`),
+        tr(locale, 'editedImages', { n: stored.length, ref: code, model: modelId }),
+        ...stored.map(s =>
+          tr(locale, 'fileLine', { code: s.code, mime: s.mime, bytes: s.bytes }),
+        ),
       ].join('\n'),
       data: { files: stored, model: modelId, source: code },
     }
@@ -168,7 +183,8 @@ export function imageGenExecutes(
     tenant = '',
   ) => {
     const prompt = strArg(args, 'prompt')
-    if (prompt.trim() === '') throw new Error('prompt is required')
+    const locale = await localeOf(deps, tenant, sessionName ?? '')
+    if (prompt.trim() === '') throw new Error(tr(locale, 'promptRequired'))
     // Optional first / last frames: stored images (file:<code>) that seed the
     // video. Only IMAGES are accepted — anything else fails loudly rather than
     // being silently dropped by the provider. `frameImages` is the v4 standard
@@ -184,7 +200,11 @@ export function imageGenExecutes(
       const mime = String(blob.meta['mime'] ?? '')
       if (!mime.startsWith('image/')) {
         throw new Error(
-          `${frameType} file ${code} is not an image (${mime || 'unknown mime'}) — the ${frameType.replace('_', ' ')} must be an image file`,
+          tr(locale, 'imageFrameNotImage', {
+            frameType,
+            code,
+            mime: mime || 'unknown mime',
+          }),
         )
       }
       return {
@@ -228,15 +248,21 @@ export function imageGenExecutes(
       })),
     )
     const frameNote = [
-      firstFrameCode === '' ? '' : `first frame file:${firstFrameCode}`,
-      lastFrameCode === '' ? '' : `last frame file:${lastFrameCode}`,
+      firstFrameCode === '' ? '' : tr(locale, 'videoFrameNoteFirst', { code: firstFrameCode }),
+      lastFrameCode === '' ? '' : tr(locale, 'videoFrameNoteLast', { code: lastFrameCode }),
     ].filter(s => s !== '')
     return {
       content: [
-        `Generated ${stored.length} video(s) with ${modelId}${
-          frameNote.length === 0 ? '' : ` (${frameNote.join(', ')})`
-        }.`,
-        ...stored.map(s => `file:${s.code} (${s.mime}, ${s.bytes} bytes)`),
+        frameNote.length === 0
+          ? tr(locale, 'generatedVideos', { n: stored.length, model: modelId })
+          : tr(locale, 'generatedVideosFrames', {
+              n: stored.length,
+              model: modelId,
+              frames: frameNote.join(', '),
+            }),
+        ...stored.map(s =>
+          tr(locale, 'fileLine', { code: s.code, mime: s.mime, bytes: s.bytes }),
+        ),
       ].join('\n'),
       data: {
         files: stored,

@@ -8,6 +8,7 @@
 
 import type { ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
+import { localeOf, tr } from './i18n.js'
 
 interface TodoRow {
   content?: string
@@ -183,11 +184,16 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     prompt: string,
     imageDataUrl: string,
     tenant: string,
+    locale: string,
   ): Promise<string> => {
     const modelId = String(await deps.resolveConfig('model.text', undefined, tenant) ?? '')
-    if (modelId === '') throw new Error('model.text not configured: set a vision model first')
+    if (modelId === '') throw new Error(tr(locale, 'visionNotConfigured'))
     const resolved = await deps.resolveModel(null as never, modelId, tenant)
-    if (resolved.isErr()) throw new Error(resolved.error ?? 'vision model not found')
+    if (resolved.isErr()) {
+      throw new Error(
+        tr(locale, 'visionNotFound', { error: resolved.error ?? tr(locale, 'modelNotFound') }),
+      )
+    }
     const model = resolved.value!.model
     const { generateText } = await import('ai')
     const res = await generateText({
@@ -210,16 +216,17 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     prompt: string,
     sessionName: string,
     tenant: string,
+    locale: string,
   ): Promise<{ content: string; data: Record<string, unknown> }> => {
     const meta = await fileMetaFromBlob(code, tenant)
     const mime = String(meta['mime'] ?? '')
     if (!mime.startsWith('image/')) {
-      throw new Error(`file ${code} is not an image (${mime})`)
+      throw new Error(tr(locale, 'imageNotImage', { code, mime }))
     }
     const blob = await deps.blobGet(code, tenant)
     const b64 = Buffer.from(blob.data).toString('base64')
     const dataUrl = `data:${mime};base64,${b64}`
-    const text = await vlmRead(prompt, dataUrl, tenant)
+    const text = await vlmRead(prompt, dataUrl, tenant, locale)
     return {
       content: text,
       data: {
@@ -242,7 +249,8 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
         ? (args['todos'] as Record<string, unknown>[])
         : []
       const n = await writeTodos(tenant, sessionName, todos)
-      return { content: `Updated ${n} todo(s).`, data: { count: n } }
+      const locale = await localeOf(deps, tenant, sessionName)
+      return { content: tr(locale, 'todosUpdated', { n }), data: { count: n } }
     },
     'history-search': async (args, _callId, sessionName, _signal, tenant = '') => {
       if (!sessionName) toolError('missing session context (session_name)')
@@ -256,7 +264,7 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
         if (to !== '' && String(e['created_at']) > to) return false
         return true
       })
-      const locale = String(await deps.resolveConfig('agent.locale', undefined, tenant) ?? 'en')
+      const locale = await localeOf(deps, tenant, sessionName)
       const content = renderHistoryList(locale, filtered)
       return { content, data: { count: filtered.length, entries } }
     },
@@ -272,7 +280,7 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
       let t = norm(to)
       if (f < 0) f = 0
       if (t > total) t = total
-      if (f >= t) return { content: 'history_range: empty.', data: { count: 0 } }
+      if (f >= t) return { content: tr(await localeOf(deps, tenant, sessionName), 'historyRangeEmpty'), data: { count: 0 } }
       const ids = chain.map(c => c.id)
       const textByMsg = await textPartsForMessages(tenant, ids, '')
       const toolByMsg = await partsForMessages(tenant, ids)
@@ -296,23 +304,31 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
           depth: r.depth,
         }
       })
-      const locale = String(await deps.resolveConfig('agent.locale', undefined, tenant) ?? 'en')
+      const locale = await localeOf(deps, tenant, sessionName)
       const content = renderHistoryList(locale, entries)
       return { content, data: { count: entries.length, entries } }
     },
-    'file-info': async (args, _callId, _sessionName, _signal, tenant = '') => {
+    'file-info': async (args, _callId, sessionName, _signal, tenant = '') => {
+      const locale = await localeOf(deps, tenant, sessionName ?? '')
       const code = strArg(args, 'code')
-      if (code === '') toolError('code is required')
+      if (code === '') toolError(tr(locale, 'codeRequired'))
       const meta = await fileMetaFromBlob(code, tenant)
-      const content = `File ${code}: ${String(meta['name'] ?? '')} (${String(meta['mime'] ?? '')}, ${Number(meta['size'] ?? 0)} bytes, sha256=${String(meta['sha256'] ?? '')})`
+      const content = tr(locale, 'fileInfo', {
+        code,
+        name: String(meta['name'] ?? ''),
+        mime: String(meta['mime'] ?? ''),
+        bytes: Number(meta['size'] ?? 0),
+        sha256: String(meta['sha256'] ?? ''),
+      })
       return { content, data: { meta } }
     },
     'image-read': async (args, _callId, sessionName, _signal, tenant = '') => {
+      const locale = await localeOf(deps, tenant, sessionName ?? '')
       const code = strArg(args, 'code')
-      if (code === '') toolError('code is required')
+      if (code === '') toolError(tr(locale, 'codeRequired'))
       let prompt = strArg(args, 'prompt')
       if (prompt === '') prompt = 'Describe this image in detail.'
-      const res = await imageRead(code, prompt, sessionName, tenant)
+      const res = await imageRead(code, prompt, sessionName, tenant, locale)
       return { content: res.content, data: res.data }
     },
   }

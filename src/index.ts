@@ -37,7 +37,7 @@ export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
     ...Object.fromEntries(
       Object.entries(memoryExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
     ),
-    'web-fetch': { execute: webFetchExecute },
+    'web-fetch': { execute: webFetchExecute(deps) },
     'brave-search': { execute: braveSearchExecute(deps) },
     'audio-transcribe': { execute: audioTranscribeExecute(deps) },
     ...Object.fromEntries(

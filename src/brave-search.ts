@@ -7,6 +7,7 @@
 
 import type { ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
+import { localeOf, tr } from './i18n.js'
 
 export const BRAVE_API_BASE = 'https://api.search.brave.com/res/v1/web/search'
 export const BRAVE_MAX_RESULTS = 20
@@ -28,9 +29,9 @@ interface BraveResponse {
   web?: { results?: BraveWebResult[] }
 }
 
-function assertApiKey(apiKey: string): void {
+function assertApiKey(apiKey: string, locale: string): void {
   if (!apiKey || apiKey.trim() === '') {
-    throw new Error('brave_api_key not configured')
+    throw new Error(tr(locale, 'braveKeyMissing'))
   }
 }
 
@@ -46,8 +47,8 @@ function renderResults(query: string, results: BraveWebResult[], count: number):
   return `Result of searching for "${query}" (${count} results):\n\n${lines.join('\n\n')}`
 }
 
-async function callBrave(apiKey: string, query: string, count: number): Promise<string> {
-  assertApiKey(apiKey)
+async function callBrave(apiKey: string, query: string, count: number, locale: string): Promise<string> {
+  assertApiKey(apiKey, locale)
   const url = new URL(BRAVE_API_BASE)
   url.searchParams.set('q', query)
   url.searchParams.set('count', String(count))
@@ -63,7 +64,7 @@ async function callBrave(apiKey: string, query: string, count: number): Promise<
     })
     const buf = Buffer.from(await res.arrayBuffer())
     if (buf.length > BRAVE_MAX_BYTES) {
-      throw new Error(`Response too large (exceeds ${BRAVE_MAX_BYTES} bytes)`)
+      throw new Error(tr(locale, 'braveTooLarge', { bytes: BRAVE_MAX_BYTES }))
     }
     if (!res.ok) {
       let msg = ''
@@ -73,13 +74,15 @@ async function callBrave(apiKey: string, query: string, count: number): Promise<
       } catch {
         /* ignore */
       }
-      throw new Error(`${BRAVE_FAILURE}: HTTP ${res.status}${msg ? ` ${msg}` : ''}`)
+      throw new Error(
+        tr(locale, 'braveHttp', { status: `${res.status}${msg ? ` ${msg}` : ''}` }),
+      )
     }
     const body = JSON.parse(buf.toString('utf8')) as BraveResponse
     return renderResults(query, body.web?.results ?? [], body.web?.results?.length ?? 0)
   } catch (e) {
     if (e instanceof Error && e.message === 'Request timed out') throw e
-    throw new Error(`${BRAVE_FAILURE}: ${String(e)}`)
+    throw new Error(tr(locale, 'braveFailed', { detail: String(e) }))
   } finally {
     clearTimeout(timer)
   }
@@ -88,15 +91,16 @@ async function callBrave(apiKey: string, query: string, count: number): Promise<
 /** brave-search execute handler (description/schema from manifest.yaml). */
 export function braveSearchExecute(deps: BundledDeps): ToolSpec['execute'] {
   return async (args, _callId, sessionName, _signal, tenant = '') => {
+    const locale = await localeOf(deps, tenant, sessionName ?? '')
     const query = String(args['query'] ?? '')
-    if (query.trim() === '') throw new Error('query is required')
+    if (query.trim() === '') throw new Error(tr(locale, 'queryRequired'))
     let count = Number(args['count'] ?? 8)
     if (!Number.isInteger(count) || count < 1) count = 8
     if (count > BRAVE_MAX_RESULTS) count = BRAVE_MAX_RESULTS
     const apiKey = String(
       (await deps.resolveConfig('brave_api_key', sessionName, tenant)) ?? '',
     )
-    const text = await callBrave(apiKey, query, count)
+    const text = await callBrave(apiKey, query, count, locale)
     return { content: text, data: { provider: 'brave', query } }
   }
 }

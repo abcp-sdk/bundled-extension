@@ -8,6 +8,7 @@
 
 import type { ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
+import { localeOf, tr } from './i18n.js'
 
 function strArg(m: Record<string, unknown>, k: string): string {
   const v = m[k]
@@ -19,24 +20,29 @@ export const audioTranscribeExecute =
   (deps: BundledDeps): ToolSpec['execute'] =>
   async (args, _callId, sessionName, _signal, tenant = '') => {
     const code = strArg(args, 'code')
-    if (code === '') throw new Error('code is required')
+    const locale = await localeOf(deps, tenant, sessionName ?? '')
+    if (code === '') throw new Error(tr(locale, 'codeRequired'))
     const language = strArg(args, 'language')
     const meta = await deps.blobGet(code, tenant).then(r => r.meta)
     const mime = String(meta['mime'] ?? '')
     if (!mime.startsWith('audio/')) {
-      throw new Error(`file ${code} is not audio (${mime || 'unknown mime'})`)
+      throw new Error(tr(locale, 'notAudio', { code, mime: mime || 'unknown mime' }))
     }
     const ref = String(
       (await deps.resolveConfig('model.transcription', sessionName, tenant)) ?? '',
     ).trim()
     if (ref === '') {
       throw new Error(
-        'model.transcription not configured — set it to a transcription model registered on the agent (provider_id/model_id, capability=transcription)',
+        tr(locale, 'transcriptionNotConfigured'),
       )
     }
     const resolved = await deps.resolveGenerative('transcription', ref, tenant)
     if (resolved.isErr()) {
-      throw new Error(`model.transcription: ${resolved.error ?? 'model not found'}`)
+      throw new Error(
+        tr(locale, 'transcriptionModelResolve', {
+          error: resolved.error ?? tr(locale, 'modelNotFound'),
+        }),
+      )
     }
     const { model, modelId } = resolved.value!
     const blob = await deps.blobGet(code, tenant)
@@ -51,7 +57,7 @@ export const audioTranscribeExecute =
           { providerOptions: { openai: { language: language.trim() } } as any }),
     })
     const text = res.text.trim()
-    if (text === '') throw new Error('transcription returned an empty transcript')
+    if (text === '') throw new Error(tr(locale, 'transcriptionEmpty'))
     return {
       content: text,
       data: {

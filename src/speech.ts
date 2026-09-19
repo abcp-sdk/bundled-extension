@@ -21,6 +21,7 @@
 import type { ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
 import { generativeFromConfig, storeMedia } from './image.js'
+import { localeOf, tr } from './i18n.js'
 
 function strArg(m: Record<string, unknown>, k: string): string {
   const v = m[k]
@@ -39,13 +40,15 @@ export function speechExecutes(
     tenant = '',
   ) => {
     const text = strArg(args, 'text')
-    if (text.trim() === '') throw new Error('text is required')
+    const locale = await localeOf(deps, tenant, sessionName ?? '')
+    if (text.trim() === '') throw new Error(tr(locale, 'textRequired'))
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
       tenant,
       'model.speech',
       'speech',
+      locale,
     )
     const { generateSpeech } = await import('ai')
     // Preset-voice model: use the provider's default voice (no override).
@@ -63,7 +66,12 @@ export function speechExecutes(
       [{ uint8Array: res.audio.uint8Array, mediaType: mime }],
     )
     return {
-      content: `Synthesized ${Math.round(res.audio.uint8Array.length / 1024)} KiB ${mime} with ${modelId}: file:${stored[0]?.code}`,
+      content: tr(locale, 'synthesized', {
+        kib: Math.round(res.audio.uint8Array.length / 1024),
+        mime,
+        model: modelId,
+        code: stored[0]?.code ?? '',
+      }),
       data: { files: stored, model: modelId },
     }
   }
@@ -77,8 +85,9 @@ export function speechExecutes(
   ) => {
     const text = strArg(args, 'text')
     const code = strArg(args, 'code')
-    if (text.trim() === '') throw new Error('text is required')
-    if (code === '') throw new Error('code is required')
+    const locale = await localeOf(deps, tenant, sessionName ?? '')
+    if (text.trim() === '') throw new Error(tr(locale, 'textRequired'))
+    if (code === '') throw new Error(tr(locale, 'codeRequired'))
     const refText = strArg(args, 'ref_text')
     const { model, modelId } = await generativeFromConfig(
       deps,
@@ -86,12 +95,13 @@ export function speechExecutes(
       tenant,
       'model.speech_clone',
       'speech',
+      locale,
     )
     const blob = await deps.blobGet(code, tenant)
     const mime = String(blob.meta['mime'] ?? '')
     if (!mime.startsWith('audio/')) {
       throw new Error(
-        `reference file ${code} is not audio (${mime || 'unknown mime'}) — voice cloning needs an audio clip`,
+        tr(locale, 'referenceNotAudio', { code, mime: mime || 'unknown mime' }),
       )
     }
     // The gateway accepts a base64 `data:` URL as the reference voice.
@@ -116,7 +126,13 @@ export function speechExecutes(
       [{ uint8Array: res.audio.uint8Array, mediaType: outMime }],
     )
     return {
-      content: `Synthesized ${Math.round(res.audio.uint8Array.length / 1024)} KiB ${outMime} with ${modelId}, cloning voice from file:${code}: file:${stored[0]?.code}`,
+      content: tr(locale, 'synthesizedClone', {
+        kib: Math.round(res.audio.uint8Array.length / 1024),
+        mime: outMime,
+        model: modelId,
+        ref: code,
+        code: stored[0]?.code ?? '',
+      }),
       data: { files: stored, model: modelId, reference: code },
     }
   }
