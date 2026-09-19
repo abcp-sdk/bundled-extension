@@ -59,11 +59,12 @@ export function speechExecutes(
       deps,
       sessionName ?? '',
       tenant,
+      'audio',
       [{ uint8Array: res.audio.uint8Array, mediaType: mime }],
     )
     return {
       content: `Synthesized ${Math.round(res.audio.uint8Array.length / 1024)} KiB ${mime} with ${modelId}: file:${stored[0]?.code}`,
-      data: { audio: stored[0], model: modelId },
+      data: { files: stored, model: modelId },
     }
   }
 
@@ -111,11 +112,12 @@ export function speechExecutes(
       deps,
       sessionName ?? '',
       tenant,
+      'audio',
       [{ uint8Array: res.audio.uint8Array, mediaType: outMime }],
     )
     return {
       content: `Synthesized ${Math.round(res.audio.uint8Array.length / 1024)} KiB ${outMime} with ${modelId}, cloning voice from file:${code}: file:${stored[0]?.code}`,
-      data: { audio: stored[0], model: modelId, reference: code },
+      data: { files: stored, model: modelId, reference: code },
     }
   }
 

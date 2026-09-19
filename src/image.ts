@@ -43,27 +43,74 @@ export async function generativeFromConfig(
   return { model: v.model, modelId: v.modelId, providerId: v.providerId }
 }
 
-/** Store generated media bytes in the agent blob store, returning file refs. */
+/** A produced file as carried in a tool result's `data.files` entry. */
+export interface ProducedFile {
+  code: string
+  mime: string
+  name: string
+  bytes: number
+}
+
+/** File extension for a mime type (best-effort; used only for the display/
+ *  download file name). */
+export function extForMime(mime: string): string {
+  const m = mime.toLowerCase()
+  const table: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/svg+xml': 'svg',
+    'image/avif': 'avif',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/ogg': 'ogg',
+    'audio/webm': 'webm',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+    'application/pdf': 'pdf',
+    'application/json': 'json',
+  }
+  if (table[m] !== undefined) return table[m]
+  const sub = m.split('/')[1] ?? ''
+  const clean = sub.replace(/[^a-z0-9]+/g, '')
+  return clean === '' ? 'bin' : clean
+}
+
+/**
+ * Store generated media bytes in the agent blob store, returning `data.files`
+ * entries. The name carries a correct extension derived from the actual mime
+ * (the old code hard-coded `.png`, which mislabels jpeg/webp output).
+ */
 export async function storeMedia(
   deps: BundledDeps,
   sessionName: string,
   tenant: string,
+  kind: 'image' | 'video' | 'audio',
   items: Array<{ uint8Array: Uint8Array; mediaType?: string }>,
-): Promise<Array<{ code: string; mime: string; bytes: number }>> {
-  const out: Array<{ code: string; mime: string; bytes: number }> = []
-  for (const img of items) {
-    const b64 = Buffer.from(img.uint8Array).toString('base64')
+): Promise<ProducedFile[]> {
+  const out: ProducedFile[] = []
+  for (const item of items) {
+    const mime =
+      item.mediaType ?? (kind === 'image' ? 'image/png' : kind === 'video' ? 'video/mp4' : 'audio/mpeg')
+    const name = `generated-${kind}-${Date.now()}-${out.length}.${extForMime(mime)}`
     const stored = await deps.ingestBlob({
-      bytes: b64,
-      name: `generated-${Date.now()}-${out.length}.png`,
-      mime: img.mediaType ?? 'image/png',
+      bytes: Buffer.from(item.uint8Array).toString('base64'),
+      name,
+      mime,
       session: sessionName,
       tenant,
     })
     out.push({
       code: stored.code,
       mime: stored.mime,
-      bytes: img.uint8Array.length,
+      name,
+      bytes: item.uint8Array.length,
     })
   }
   return out
@@ -98,13 +145,13 @@ export function imageGenExecutes(
       n: Number(args['n'] ?? 1),
       ...(size.trim() === '' ? {} : { size: size as `${number}x${number}` }),
     })
-    const stored = await storeMedia(deps, sessionName ?? '', tenant, res.images)
+    const stored = await storeMedia(deps, sessionName ?? '', tenant, 'image', res.images)
     return {
       content: [
         `Generated ${stored.length} image(s) with ${modelId}.`,
         ...stored.map(s => `file:${s.code} (${s.mime}, ${s.bytes} bytes)`),
       ].join('\n'),
-      data: { images: stored, model: modelId },
+      data: { files: stored, model: modelId },
     }
   }
 
@@ -136,13 +183,13 @@ export function imageGenExecutes(
         text: prompt,
       },
     })
-    const stored = await storeMedia(deps, sessionName ?? '', tenant, res.images)
+    const stored = await storeMedia(deps, sessionName ?? '', tenant, 'image', res.images)
     return {
       content: [
         `Edited ${stored.length} image(s) from file:${code} with ${modelId}.`,
         ...stored.map(s => `file:${s.code} (${s.mime}, ${s.bytes} bytes)`),
       ].join('\n'),
-      data: { images: stored, model: modelId, source: code },
+      data: { files: stored, model: modelId, source: code },
     }
   }
 
@@ -207,6 +254,7 @@ export function imageGenExecutes(
       deps,
       sessionName ?? '',
       tenant,
+      'video',
       res.videos.map(v => ({
         uint8Array: v.uint8Array,
         mediaType: v.mediaType ?? 'video/mp4',
@@ -224,7 +272,7 @@ export function imageGenExecutes(
         ...stored.map(s => `file:${s.code} (${s.mime}, ${s.bytes} bytes)`),
       ].join('\n'),
       data: {
-        videos: stored,
+        files: stored,
         model: modelId,
         ...(firstFrameCode === '' ? {} : { first_frame: firstFrameCode }),
         ...(lastFrameCode === '' ? {} : { last_frame: lastFrameCode }),
