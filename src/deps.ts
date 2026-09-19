@@ -131,18 +131,17 @@ export interface BundledDeps {
   ) => Promise<{ meta: Record<string, unknown>; data: Uint8Array }>
   /**
    * Store generated media bytes (images/videos/audio) in the agent blob
-   * store so they can be referenced as `file:<code>`. Returns the stored
-   * record's code + mime.
+   * store so they can be referenced as `file:<code>`. The content type is
+   * DERIVED by the agent from the bytes; the returned `mime` is authoritative.
    */
   ingestBlob: (input: {
     /** base64-encoded media bytes. */
     bytes: string
     name: string
-    mime: string
     session: string
     /** Isolation key the generated media belongs to (v2). */
     tenant?: string
-  }) => Promise<{ code: string; mime: string }>
+  }) => Promise<{ code: string; mime: string; name: string }>
 }
 
 /** Narrow a `Record<string, unknown>` blob meta into a string map (structural). */

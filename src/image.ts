@@ -51,41 +51,11 @@ export interface ProducedFile {
   bytes: number
 }
 
-/** File extension for a mime type (best-effort; used only for the display/
- *  download file name). */
-export function extForMime(mime: string): string {
-  const m = mime.toLowerCase()
-  const table: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-    'image/svg+xml': 'svg',
-    'image/avif': 'avif',
-    'video/mp4': 'mp4',
-    'video/webm': 'webm',
-    'video/quicktime': 'mov',
-    'audio/mpeg': 'mp3',
-    'audio/mp3': 'mp3',
-    'audio/wav': 'wav',
-    'audio/x-wav': 'wav',
-    'audio/ogg': 'ogg',
-    'audio/webm': 'webm',
-    'audio/mp4': 'm4a',
-    'audio/aac': 'aac',
-    'application/pdf': 'pdf',
-    'application/json': 'json',
-  }
-  if (table[m] !== undefined) return table[m]
-  const sub = m.split('/')[1] ?? ''
-  const clean = sub.replace(/[^a-z0-9]+/g, '')
-  return clean === '' ? 'bin' : clean
-}
-
 /**
  * Store generated media bytes in the agent blob store, returning `data.files`
- * entries. The name carries a correct extension derived from the actual mime
- * (the old code hard-coded `.png`, which mislabels jpeg/webp output).
+ * entries. The content type is DERIVED by the agent from the bytes (the
+ * generator's `mediaType` is not trusted), and the agent completes the display
+ * name with the correct extension — so the caller passes only bytes + a stem.
  */
 export async function storeMedia(
   deps: BundledDeps,
@@ -96,20 +66,17 @@ export async function storeMedia(
 ): Promise<ProducedFile[]> {
   const out: ProducedFile[] = []
   for (const item of items) {
-    const mime =
-      item.mediaType ?? (kind === 'image' ? 'image/png' : kind === 'video' ? 'video/mp4' : 'audio/mpeg')
-    const name = `generated-${kind}-${Date.now()}-${out.length}.${extForMime(mime)}`
+    const name = `generated-${kind}-${Date.now()}-${out.length}`
     const stored = await deps.ingestBlob({
       bytes: Buffer.from(item.uint8Array).toString('base64'),
       name,
-      mime,
       session: sessionName,
       tenant,
     })
     out.push({
       code: stored.code,
       mime: stored.mime,
-      name,
+      name: stored.name,
       bytes: item.uint8Array.length,
     })
   }
