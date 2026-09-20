@@ -22,7 +22,6 @@ export const audioTranscribeExecute =
     const code = strArg(args, 'code')
     const locale = await localeOf(deps, tenant, sessionName ?? '')
     if (code === '') throw new Error(tr(locale, 'codeRequired'))
-    const language = strArg(args, 'language')
     const meta = await deps.blobGet(code, tenant).then(r => r.meta)
     const mime = String(meta['mime'] ?? '')
     if (!mime.startsWith('audio/')) {
@@ -47,14 +46,12 @@ export const audioTranscribeExecute =
     const { model, modelId } = resolved.value!
     const blob = await deps.blobGet(code, tenant)
     const { transcribe } = await import('ai')
+    // No `language` hint is sent: the gateway rejects the openai
+    // providerOptions.language param. The model auto-detects the language.
     const res = await transcribe({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: model as any,
       audio: new Uint8Array(blob.data),
-      ...(language.trim() === ''
-        ? {}
-        : // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          { providerOptions: { openai: { language: language.trim() } } as any }),
     })
     const text = res.text.trim()
     if (text === '') throw new Error(tr(locale, 'transcriptionEmpty'))
@@ -65,7 +62,6 @@ export const audioTranscribeExecute =
         mime,
         size: Number(meta['size'] ?? 0),
         model: modelId,
-        language: language || undefined,
       },
     }
   }
