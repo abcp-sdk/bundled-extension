@@ -48,7 +48,9 @@ function fixture() {
       String(
         (
           db
-            .prepare('SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?')
+            .prepare(
+              'SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?',
+            )
             .all(tenant, sid) as Record<string, unknown>[]
         )[0]?.['g'] ?? '',
       ),
@@ -79,7 +81,9 @@ function fixture() {
     sessionsInGroup: async (tenant, group) =>
       (
         db
-          .prepare('SELECT name AS n FROM sessions WHERE tenant = ? AND "group" = ?')
+          .prepare(
+            'SELECT name AS n FROM sessions WHERE tenant = ? AND "group" = ?',
+          )
           .all(tenant, group) as Record<string, unknown>[]
       ).map(r => String(r['n'] ?? '')),
     publishMailbox: async (
@@ -332,7 +336,9 @@ describe('subsession-create i18n', () => {
         String(
           (
             db
-              .prepare('SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?')
+              .prepare(
+                'SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?',
+              )
               .all('t', sid) as Record<string, unknown>[]
           )[0]?.['g'] ?? '',
         ),
@@ -396,7 +402,9 @@ describe('subsession handoff fork-context preamble', () => {
         String(
           (
             db
-              .prepare('SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?')
+              .prepare(
+                'SELECT "group" AS g FROM sessions WHERE tenant = ? AND name = ?',
+              )
               .all('t', sid) as Record<string, unknown>[]
           )[0]?.['g'] ?? '',
         ),
@@ -434,7 +442,9 @@ describe('subsession handoff fork-context preamble', () => {
     expect(text).toContain('subsession context')
     expect(text).toContain("parent session 'p'")
     // Task must come AFTER the preamble.
-    expect(text.indexOf('subsession context')).toBeLessThan(text.indexOf('do it'))
+    expect(text.indexOf('subsession context')).toBeLessThan(
+      text.indexOf('do it'),
+    )
     db.close()
   })
 })

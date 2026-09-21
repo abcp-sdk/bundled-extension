@@ -6,21 +6,21 @@
  * agent localizes via `pickDescription`/`localizeSchema`.
  */
 
-import { parseManifest, manifestConfig } from '@abc-protocol/sdk'
 import type { ExtensionConfig, ToolSpec } from '@abc-protocol/sdk'
-import type { BundledDeps } from './deps.js'
+import { manifestConfig, parseManifest } from '@abc-protocol/sdk'
 import manifestYaml from '../manifest.yaml'
-import { webFetchExecute } from './webfetch.js'
-import { braveSearchExecute } from './brave-search.js'
-import { imageGenExecutes } from './image.js'
-import { speechExecutes } from './speech.js'
 import { audioTranscribeExecute } from './asr.js'
+import { braveSearchExecute } from './brave-search.js'
+import type { BundledDeps } from './deps.js'
+import { imageGenExecutes } from './image.js'
 import { memoryExecutes } from './memory.js'
+import { speechExecutes } from './speech.js'
 import { deleteSubsessions, subsessionExecutes } from './subsession.js'
+import { webFetchExecute } from './webfetch.js'
 
+export * from './asr.js'
 export * from './deps.js'
 export * from './serve.js'
-export * from './asr.js'
 export * from './subsession.js'
 export type { BundledDeps }
 
@@ -41,13 +41,19 @@ export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
     'brave-search': { execute: braveSearchExecute(deps) },
     'audio-transcribe': { execute: audioTranscribeExecute(deps) },
     ...Object.fromEntries(
-      Object.entries(imageGenExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
+      Object.entries(imageGenExecutes(deps)).map(([k, v]) => [
+        k,
+        { execute: v },
+      ]),
     ),
     ...Object.fromEntries(
       Object.entries(speechExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
     ),
     ...Object.fromEntries(
-      Object.entries(subsessionExecutes(deps)).map(([k, v]) => [k, { execute: v }]),
+      Object.entries(subsessionExecutes(deps)).map(([k, v]) => [
+        k,
+        { execute: v },
+      ]),
     ),
   }
   const cfg = manifestConfig(manifest, { handlers })

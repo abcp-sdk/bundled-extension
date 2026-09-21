@@ -11,14 +11,9 @@
  * separate base-url/key pair. One endpoint, one key, capability-tagged.
  */
 
-import type { ToolSpec } from '@abc-protocol/sdk'
+import { strArg, type ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
 import { localeOf, tr } from './i18n.js'
-
-function strArg(m: Record<string, unknown>, k: string): string {
-  const v = m[k]
-  return typeof v === 'string' ? v : ''
-}
 
 /** Resolve a generation model from a config knob holding a provider/model ref. */
 export async function generativeFromConfig(
@@ -115,18 +110,28 @@ export function imageGenExecutes(
     const { generateImage } = await import('ai')
     const size = strArg(args, 'size')
     const res = await generateImage({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: the AI SDK option bags are not fully typed across providers
       model: model as any,
       prompt,
       n: Number(args['n'] ?? 1),
       ...(size.trim() === '' ? {} : { size: size as `${number}x${number}` }),
     })
-    const stored = await storeMedia(deps, sessionName ?? '', tenant, 'image', res.images)
+    const stored = await storeMedia(
+      deps,
+      sessionName ?? '',
+      tenant,
+      'image',
+      res.images,
+    )
     return {
       content: [
         tr(locale, 'generatedImages', { n: stored.length, model: modelId }),
         ...stored.map(s =>
-          tr(locale, 'fileLine', { code: s.code, mime: s.mime, bytes: s.bytes }),
+          tr(locale, 'fileLine', {
+            code: s.code,
+            mime: s.mime,
+            bytes: s.bytes,
+          }),
         ),
       ].join('\n'),
       data: { files: stored, model: modelId },
@@ -156,19 +161,33 @@ export function imageGenExecutes(
     const blob = await deps.blobGet(code, tenant)
     const { generateImage } = await import('ai')
     const res = await generateImage({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: the AI SDK option bags are not fully typed across providers
       model: model as any,
       prompt: {
         images: [Buffer.from(blob.data)],
         text: prompt,
       },
     })
-    const stored = await storeMedia(deps, sessionName ?? '', tenant, 'image', res.images)
+    const stored = await storeMedia(
+      deps,
+      sessionName ?? '',
+      tenant,
+      'image',
+      res.images,
+    )
     return {
       content: [
-        tr(locale, 'editedImages', { n: stored.length, ref: code, model: modelId }),
+        tr(locale, 'editedImages', {
+          n: stored.length,
+          ref: code,
+          model: modelId,
+        }),
         ...stored.map(s =>
-          tr(locale, 'fileLine', { code: s.code, mime: s.mime, bytes: s.bytes }),
+          tr(locale, 'fileLine', {
+            code: s.code,
+            mime: s.mime,
+            bytes: s.bytes,
+          }),
         ),
       ].join('\n'),
       data: { files: stored, model: modelId, source: code },
@@ -194,7 +213,10 @@ export function imageGenExecutes(
     const loadFrame = async (
       code: string,
       frameType: 'first_frame' | 'last_frame',
-    ): Promise<{ image: string; frameType: 'first_frame' | 'last_frame' } | null> => {
+    ): Promise<{
+      image: string
+      frameType: 'first_frame' | 'last_frame'
+    } | null> => {
       if (code === '') return null
       const blob = await deps.blobGet(code, tenant)
       const mime = String(blob.meta['mime'] ?? '')
@@ -217,7 +239,10 @@ export function imageGenExecutes(
         loadFrame(firstFrameCode, 'first_frame'),
         loadFrame(lastFrameCode, 'last_frame'),
       ])
-    ).filter((f): f is { image: string; frameType: 'first_frame' | 'last_frame' } => f !== null)
+    ).filter(
+      (f): f is { image: string; frameType: 'first_frame' | 'last_frame' } =>
+        f !== null,
+    )
     const { model, modelId } = await generativeFromConfig(
       deps,
       sessionName ?? '',
@@ -229,13 +254,17 @@ export function imageGenExecutes(
     const aspect = strArg(args, 'aspect_ratio')
     const resolution = strArg(args, 'resolution')
     const res = await experimental_generateVideo({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: the AI SDK option bags are not fully typed across providers
       model: model as any,
       prompt,
-      ...(aspect.trim() === '' ? {} : { aspectRatio: aspect as `${number}:${number}` }),
-      ...(resolution.trim() === '' ? {} : { resolution: resolution as `${number}p` }),
+      ...(aspect.trim() === ''
+        ? {}
+        : { aspectRatio: aspect as `${number}:${number}` }),
+      ...(resolution.trim() === ''
+        ? {}
+        : { resolution: resolution as `${number}p` }),
       ...(frames.length === 0 ? {} : { frameImages: frames }),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: the AI SDK option bags are not fully typed across providers
     } as any)
     const stored = await storeMedia(
       deps,
@@ -248,8 +277,12 @@ export function imageGenExecutes(
       })),
     )
     const frameNote = [
-      firstFrameCode === '' ? '' : tr(locale, 'videoFrameNoteFirst', { code: firstFrameCode }),
-      lastFrameCode === '' ? '' : tr(locale, 'videoFrameNoteLast', { code: lastFrameCode }),
+      firstFrameCode === ''
+        ? ''
+        : tr(locale, 'videoFrameNoteFirst', { code: firstFrameCode }),
+      lastFrameCode === ''
+        ? ''
+        : tr(locale, 'videoFrameNoteLast', { code: lastFrameCode }),
     ].filter(s => s !== '')
     return {
       content: [
@@ -261,7 +294,11 @@ export function imageGenExecutes(
               frames: frameNote.join(', '),
             }),
         ...stored.map(s =>
-          tr(locale, 'fileLine', { code: s.code, mime: s.mime, bytes: s.bytes }),
+          tr(locale, 'fileLine', {
+            code: s.code,
+            mime: s.mime,
+            bytes: s.bytes,
+          }),
         ),
       ].join('\n'),
       data: {

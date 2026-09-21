@@ -6,32 +6,22 @@
  * the execute handlers only.
  */
 
-import type { ToolSpec } from '@abc-protocol/sdk'
+import { numArg as numArgRaw, strArg, type ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
 import { localeOf, tr } from './i18n.js'
 
-interface TodoRow {
-  content?: string
-  status?: string
-  priority?: string
-  created_unix?: number
-}
-
-function strArg(m: Record<string, unknown>, k: string): string {
-  const v = m[k]
-  return typeof v === 'string' ? v : ''
-}
-
+/** Read a number argument with a fallback default (built on the SDK's
+ *  undefined-for-invalid extension-kit primitive). */
 function numArg(m: Record<string, unknown>, k: string, def: number): number {
-  const v = m[k]
-  if (typeof v === 'number') return v
-  return def
+  return numArgRaw(m, k) ?? def
 }
 
 /** The bundled extension's `todos` table, created idempotently in the agent DB. */
 
 /** Build the memory/history/file/vision execute handlers bound to [deps]. */
-export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['execute']> {
+export function memoryExecutes(
+  deps: BundledDeps,
+): Record<string, ToolSpec['execute']> {
   // Ensure the todos table exists (idempotent) at tool-set construction time.
   void deps.todosEnsure().catch(() => {})
 
@@ -57,7 +47,12 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
 
   const chainRaw = (tenant: string, tip: string, limit: number) =>
     deps.messageChain(tenant, tip, limit).then(rows =>
-      rows.map(r => ({ id: r.id, role: r.role, created: r.createdAt, depth: r.depth })),
+      rows.map(r => ({
+        id: r.id,
+        role: r.role,
+        created: r.createdAt,
+        depth: r.depth,
+      })),
     )
 
   const textPartsForMessages = async (
@@ -74,7 +69,8 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
       try {
         const v = JSON.parse(r.data) as { text?: string }
         const t = v.text ?? ''
-        if (query !== '' && !t.toLowerCase().includes(query.toLowerCase())) continue
+        if (query !== '' && !t.toLowerCase().includes(query.toLowerCase()))
+          continue
         out.set(mid, (out.get(mid) ?? '') + t)
       } catch {
         /* ignore malformed */
@@ -111,7 +107,10 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     return out
   }
 
-  const renderHistoryList = (locale: string, entries: Array<Record<string, unknown>>): string => {
+  const renderHistoryList = (
+    locale: string,
+    entries: Array<Record<string, unknown>>,
+  ): string => {
     if (entries.length === 0) return 'history_search: no matching messages.'
     const label = locale.startsWith('zh') ? '历史' : 'history'
     const lines: string[] = [`${label} ${entries.length} 条：`]
@@ -119,13 +118,16 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
       const e = entries[i]!
       const role = String(e['role'] ?? '?')
       let meta = `[${i}] ${role} (depth ${String(e['depth'] ?? 0)})`
-      if (String(e['created_at'] ?? '') !== '') meta += ' ' + String(e['created_at'])
-      if (String(e['tool_name'] ?? '') !== '') meta += ' tool=' + String(e['tool_name'])
-      if (String(e['change_id'] ?? '') !== '') meta += ' change=' + String(e['change_id'])
+      if (String(e['created_at'] ?? '') !== '')
+        meta += ` ${String(e['created_at'])}`
+      if (String(e['tool_name'] ?? '') !== '')
+        meta += ` tool=${String(e['tool_name'])}`
+      if (String(e['change_id'] ?? '') !== '')
+        meta += ` change=${String(e['change_id'])}`
       const body = String(e['content'] ?? '')
-      const truncated = body.length > 200 ? body.slice(0, 200) + '…' : body
+      const truncated = body.length > 200 ? `${body.slice(0, 200)}…` : body
       lines.push(meta)
-      if (truncated !== '') lines.push('    ' + truncated)
+      if (truncated !== '') lines.push(`    ${truncated}`)
     }
     return lines.join('\n')
   }
@@ -155,7 +157,7 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
         }
       }
       if (query !== '') {
-        const hay = (content + ' ' + toolName + ' ' + changeID).toLowerCase()
+        const hay = `${content} ${toolName} ${changeID}`.toLowerCase()
         if (!hay.includes(query.toLowerCase())) continue
       }
       out.push({
@@ -186,12 +188,16 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     tenant: string,
     locale: string,
   ): Promise<string> => {
-    const modelId = String(await deps.resolveConfig('model.text', undefined, tenant) ?? '')
+    const modelId = String(
+      (await deps.resolveConfig('model.text', undefined, tenant)) ?? '',
+    )
     if (modelId === '') throw new Error(tr(locale, 'visionNotConfigured'))
     const resolved = await deps.resolveModel(null as never, modelId, tenant)
     if (resolved.isErr()) {
       throw new Error(
-        tr(locale, 'visionNotFound', { error: resolved.error ?? tr(locale, 'modelNotFound') }),
+        tr(locale, 'visionNotFound', {
+          error: resolved.error ?? tr(locale, 'modelNotFound'),
+        }),
       )
     }
     const model = resolved.value!.model
@@ -214,7 +220,7 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
   const imageRead = async (
     code: string,
     prompt: string,
-    sessionName: string,
+    _sessionName: string,
     tenant: string,
     locale: string,
   ): Promise<{ content: string; data: Record<string, unknown> }> => {
@@ -230,7 +236,9 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
     return {
       content: text,
       data: {
-        model: String(await deps.resolveConfig('model.text', undefined, tenant) ?? ''),
+        model: String(
+          (await deps.resolveConfig('model.text', undefined, tenant)) ?? '',
+        ),
         code,
         mime,
         size: Number(meta['size'] ?? 0),
@@ -252,13 +260,24 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
       const locale = await localeOf(deps, tenant, sessionName)
       return { content: tr(locale, 'todosUpdated', { n }), data: { count: n } }
     },
-    'history-search': async (args, _callId, sessionName, _signal, tenant = '') => {
+    'history-search': async (
+      args,
+      _callId,
+      sessionName,
+      _signal,
+      tenant = '',
+    ) => {
       if (!sessionName) toolError('missing session context (session_name)')
       const query = strArg(args, 'query')
       const from = strArg(args, 'from')
       const to = strArg(args, 'to')
       const limit = numArg(args, 'limit', 50)
-      const entries = await buildHistoryEntries(tenant, sessionName, query, limit)
+      const entries = await buildHistoryEntries(
+        tenant,
+        sessionName,
+        query,
+        limit,
+      )
       const filtered = entries.filter(e => {
         if (from !== '' && String(e['created_at']) < from) return false
         if (to !== '' && String(e['created_at']) > to) return false
@@ -268,19 +287,36 @@ export function memoryExecutes(deps: BundledDeps): Record<string, ToolSpec['exec
       const content = renderHistoryList(locale, filtered)
       return { content, data: { count: filtered.length, entries } }
     },
-    'history-range': async (args, _callId, sessionName, _signal, tenant = '') => {
+    'history-range': async (
+      args,
+      _callId,
+      sessionName,
+      _signal,
+      tenant = '',
+    ) => {
       if (!sessionName) toolError('missing session context (session_name)')
       const from = numArg(args, 'from', 0)
       const to = numArg(args, 'to', 0)
       const limit = numArg(args, 'limit', 200)
-      const chain = await chainRaw(tenant, await sessionTip(tenant, sessionName), limit)
+      const chain = await chainRaw(
+        tenant,
+        await sessionTip(tenant, sessionName),
+        limit,
+      )
       const total = chain.length
       const norm = (d: number): number => (d < 0 ? total + d : d)
       let f = norm(from)
       let t = norm(to)
       if (f < 0) f = 0
       if (t > total) t = total
-      if (f >= t) return { content: tr(await localeOf(deps, tenant, sessionName), 'historyRangeEmpty'), data: { count: 0 } }
+      if (f >= t)
+        return {
+          content: tr(
+            await localeOf(deps, tenant, sessionName),
+            'historyRangeEmpty',
+          ),
+          data: { count: 0 },
+        }
       const ids = chain.map(c => c.id)
       const textByMsg = await textPartsForMessages(tenant, ids, '')
       const toolByMsg = await partsForMessages(tenant, ids)

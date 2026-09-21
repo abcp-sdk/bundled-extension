@@ -35,7 +35,11 @@ function assertApiKey(apiKey: string, locale: string): void {
   }
 }
 
-function renderResults(query: string, results: BraveWebResult[], count: number): string {
+function renderResults(
+  query: string,
+  results: BraveWebResult[],
+  count: number,
+): string {
   if (!results || results.length === 0) return BRAVE_NO_RESULTS
   const lines: string[] = []
   for (const r of results) {
@@ -47,13 +51,21 @@ function renderResults(query: string, results: BraveWebResult[], count: number):
   return `Result of searching for "${query}" (${count} results):\n\n${lines.join('\n\n')}`
 }
 
-async function callBrave(apiKey: string, query: string, count: number, locale: string): Promise<string> {
+async function callBrave(
+  apiKey: string,
+  query: string,
+  count: number,
+  locale: string,
+): Promise<string> {
   assertApiKey(apiKey, locale)
   const url = new URL(BRAVE_API_BASE)
   url.searchParams.set('q', query)
   url.searchParams.set('count', String(count))
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(new Error('Request timed out')), BRAVE_TIMEOUT_MS)
+  const timer = setTimeout(
+    () => controller.abort(new Error('Request timed out')),
+    BRAVE_TIMEOUT_MS,
+  )
   try {
     const res = await fetch(url, {
       headers: {
@@ -69,17 +81,26 @@ async function callBrave(apiKey: string, query: string, count: number, locale: s
     if (!res.ok) {
       let msg = ''
       try {
-        const j = JSON.parse(buf.toString('utf8')) as { message?: string; error?: string }
+        const j = JSON.parse(buf.toString('utf8')) as {
+          message?: string
+          error?: string
+        }
         msg = j.message ?? j.error ?? ''
       } catch {
         /* ignore */
       }
       throw new Error(
-        tr(locale, 'braveHttp', { status: `${res.status}${msg ? ` ${msg}` : ''}` }),
+        tr(locale, 'braveHttp', {
+          status: `${res.status}${msg ? ` ${msg}` : ''}`,
+        }),
       )
     }
     const body = JSON.parse(buf.toString('utf8')) as BraveResponse
-    return renderResults(query, body.web?.results ?? [], body.web?.results?.length ?? 0)
+    return renderResults(
+      query,
+      body.web?.results ?? [],
+      body.web?.results?.length ?? 0,
+    )
   } catch (e) {
     if (e instanceof Error && e.message === 'Request timed out') throw e
     throw new Error(tr(locale, 'braveFailed', { detail: String(e) }))

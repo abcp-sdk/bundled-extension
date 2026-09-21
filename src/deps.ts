@@ -25,7 +25,11 @@ export interface MessagePartRow {
 export interface BundledDeps {
   /** Resolve a provider/model reference to an AI SDK LanguageModel.
    *  `tenant` scopes the provider registry lookup (v2). */
-  resolveModel: (db: unknown, modelId: string, tenant?: string) => Promise<{
+  resolveModel: (
+    db: unknown,
+    modelId: string,
+    tenant?: string,
+  ) => Promise<{
     isOk: () => boolean
     isErr: () => boolean
     value?: { model: LanguageModel }
@@ -100,10 +104,7 @@ export interface BundledDeps {
     limit: number,
   ): Promise<ChainEntry[]>
   /** Ordered parts (message_id, seq order) for the given message ids. */
-  messageParts(
-    tenant: string,
-    ids: string[],
-  ): Promise<MessagePartRow[]>
+  messageParts(tenant: string, ids: string[]): Promise<MessagePartRow[]>
   /** Ensure the bundled todo table exists (idempotent). */
   todosEnsure(): Promise<void>
   /** Replace a session's todo rows wholesale. */
@@ -145,6 +146,8 @@ export interface BundledDeps {
 }
 
 /** Narrow a `Record<string, unknown>` blob meta into a string map (structural). */
-export function metaToObj(meta: Record<string, unknown>): Record<string, unknown> {
+export function metaToObj(
+  meta: Record<string, unknown>,
+): Record<string, unknown> {
   return { ...meta }
 }

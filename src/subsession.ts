@@ -22,13 +22,8 @@
  * parent is resumed when the child's result lands in its mailbox.
  */
 
-import type { ToolSpec } from '@abc-protocol/sdk'
+import { strArg, type ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
-
-function strArg(m: Record<string, unknown>, k: string): string {
-  const v = m[k]
-  return typeof v === 'string' ? v : ''
-}
 
 /** Locale-aware fixed strings for the subsession tools. */
 function strings(locale: string): {
@@ -60,7 +55,8 @@ function strings(locale: string): {
         `现在请立即结束本轮，不要轮询——结果到达时会自动恢复你。`,
       delivered: to => `消息已投递到会话 '${to}'。`,
       errMissingPrompt: 'subsession-create: 缺少 "prompt"。',
-      errNested: 'subsession-create: 本会话本身就是一个 subsession，不允许嵌套创建。',
+      errNested:
+        'subsession-create: 本会话本身就是一个 subsession，不允许嵌套创建。',
       errParentMissing: sid => `subsession-create: 找不到父会话 '${sid}'。`,
       errExists: sid => `subsession-create: 会话 '${sid}' 已存在。`,
       errMissingTo: 'mail-send: 缺少 "to"。',
@@ -89,7 +85,8 @@ function strings(locale: string): {
     errMissingPrompt: 'subsession-create: missing "prompt".',
     errNested:
       'subsession-create: this session is itself a subsession; nested subsessions are not allowed.',
-    errParentMissing: sid => `subsession-create: parent session '${sid}' not found.`,
+    errParentMissing: sid =>
+      `subsession-create: parent session '${sid}' not found.`,
     errExists: sid => `subsession-create: session '${sid}' already exists.`,
     errMissingTo: 'mail-send: missing "to".',
     errMissingText: 'mail-send: missing "text".',
@@ -154,7 +151,8 @@ export function subsessionExecutes(
     }
 
     const explicit = strArg(args, 'name').trim()
-    const childName = explicit !== '' ? explicit : `${sessionName}#sub-${shortId()}`
+    const childName =
+      explicit !== '' ? explicit : `${sessionName}#sub-${shortId()}`
     if (await sessionExists(tenant, childName)) {
       return { content: s.errExists(childName) }
     }
@@ -168,7 +166,9 @@ export function subsessionExecutes(
     // the task itself and a completion instruction — all in the session's
     // own locale.
     const handoff = `${s.forkPreamble(sessionName)}\n\n${prompt}${s.handoff(sessionName)}`
-    await deps.publishMailbox(tenant, childName, 'user_prompt', { text: handoff })
+    await deps.publishMailbox(tenant, childName, 'user_prompt', {
+      text: handoff,
+    })
 
     const desc = strArg(args, 'description').trim()
     return { content: s.started(childName, desc) }

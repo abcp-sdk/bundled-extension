@@ -1,8 +1,4 @@
-import {
-  BASE_LOCALE,
-  type Catalog,
-  defineI18n,
-} from '@abc-protocol/sdk'
+import { BASE_LOCALE, type Catalog, defineI18n } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
 
 /**

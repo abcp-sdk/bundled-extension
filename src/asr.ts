@@ -6,14 +6,9 @@
  * `deps.resolveGenerative` and driven with the AI SDK `transcribe()`.
  */
 
-import type { ToolSpec } from '@abc-protocol/sdk'
+import { strArg, type ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
 import { localeOf, tr } from './i18n.js'
-
-function strArg(m: Record<string, unknown>, k: string): string {
-  const v = m[k]
-  return typeof v === 'string' ? v : ''
-}
 
 /** audio-transcribe execute handler. */
 export const audioTranscribeExecute =
@@ -25,15 +20,16 @@ export const audioTranscribeExecute =
     const meta = await deps.blobGet(code, tenant).then(r => r.meta)
     const mime = String(meta['mime'] ?? '')
     if (!mime.startsWith('audio/')) {
-      throw new Error(tr(locale, 'notAudio', { code, mime: mime || 'unknown mime' }))
+      throw new Error(
+        tr(locale, 'notAudio', { code, mime: mime || 'unknown mime' }),
+      )
     }
     const ref = String(
-      (await deps.resolveConfig('model.transcription', sessionName, tenant)) ?? '',
+      (await deps.resolveConfig('model.transcription', sessionName, tenant)) ??
+        '',
     ).trim()
     if (ref === '') {
-      throw new Error(
-        tr(locale, 'transcriptionNotConfigured'),
-      )
+      throw new Error(tr(locale, 'transcriptionNotConfigured'))
     }
     const resolved = await deps.resolveGenerative('transcription', ref, tenant)
     if (resolved.isErr()) {
@@ -49,7 +45,7 @@ export const audioTranscribeExecute =
     // No `language` hint is sent: the gateway rejects the openai
     // providerOptions.language param. The model auto-detects the language.
     const res = await transcribe({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: the AI SDK option bags are not fully typed across providers
       model: model as any,
       audio: new Uint8Array(blob.data),
     })

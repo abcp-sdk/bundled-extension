@@ -18,15 +18,10 @@
  * schemas live in manifest.yaml (with `descriptions.zh`).
  */
 
-import type { ToolSpec } from '@abc-protocol/sdk'
+import { strArg, type ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
-import { generativeFromConfig, storeMedia } from './image.js'
 import { localeOf, tr } from './i18n.js'
-
-function strArg(m: Record<string, unknown>, k: string): string {
-  const v = m[k]
-  return typeof v === 'string' ? v : ''
-}
+import { generativeFromConfig, storeMedia } from './image.js'
 
 /** Build the generation execute handlers bound to [deps]. */
 export function speechExecutes(
@@ -53,18 +48,14 @@ export function speechExecutes(
     const { generateSpeech } = await import('ai')
     // Preset-voice model: use the provider's default voice (no override).
     const res = await generateSpeech({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: the AI SDK option bags are not fully typed across providers
       model: model as any,
       text,
     })
     const mime = res.audio.mediaType ?? 'audio/mpeg'
-    const stored = await storeMedia(
-      deps,
-      sessionName ?? '',
-      tenant,
-      'audio',
-      [{ uint8Array: res.audio.uint8Array, mediaType: mime }],
-    )
+    const stored = await storeMedia(deps, sessionName ?? '', tenant, 'audio', [
+      { uint8Array: res.audio.uint8Array, mediaType: mime },
+    ])
     return {
       content: tr(locale, 'synthesized', {
         kib: Math.round(res.audio.uint8Array.length / 1024),
@@ -108,23 +99,21 @@ export function speechExecutes(
     const refAudio = `data:${mime};base64,${Buffer.from(blob.data).toString('base64')}`
     const { generateSpeech } = await import('ai')
     const res = await generateSpeech({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: the AI SDK option bags are not fully typed across providers
       model: model as any,
       text,
       voice: refAudio,
       ...(refText.trim() === ''
         ? {}
-        : // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          { providerOptions: { gateway: { ref_text: refText.trim() } } as any }),
+        : {
+            // biome-ignore lint/suspicious/noExplicitAny: the AI SDK option bags are not fully typed across providers
+            providerOptions: { gateway: { ref_text: refText.trim() } } as any,
+          }),
     })
     const outMime = res.audio.mediaType ?? 'audio/mpeg'
-    const stored = await storeMedia(
-      deps,
-      sessionName ?? '',
-      tenant,
-      'audio',
-      [{ uint8Array: res.audio.uint8Array, mediaType: outMime }],
-    )
+    const stored = await storeMedia(deps, sessionName ?? '', tenant, 'audio', [
+      { uint8Array: res.audio.uint8Array, mediaType: outMime },
+    ])
     return {
       content: tr(locale, 'synthesizedClone', {
         kib: Math.round(res.audio.uint8Array.length / 1024),

@@ -5,9 +5,9 @@
  * htmlparser2 + turndown).
  */
 
+import type { ToolSpec } from '@abc-protocol/sdk'
 import { parseDocument } from 'htmlparser2'
 import TurndownService from 'turndown'
-import type { ToolSpec } from '@abc-protocol/sdk'
 import type { BundledDeps } from './deps.js'
 import { localeOf, tr } from './i18n.js'
 
@@ -52,11 +52,23 @@ const isTextualMime = (mime: string): boolean =>
 /** Plain text extraction: skip script/style/noscript/iframe/object/embed. */
 export function extractTextFromHTML(html: string): string {
   const doc = parseDocument(html)
-  const skip = new Set(['script', 'style', 'noscript', 'iframe', 'object', 'embed'])
+  const skip = new Set([
+    'script',
+    'style',
+    'noscript',
+    'iframe',
+    'object',
+    'embed',
+  ])
   const out: string[] = []
   const walk = (node: unknown): void => {
     if (!node || typeof node !== 'object') return
-    const n = node as { type?: string; name?: string; children?: unknown[]; data?: string }
+    const n = node as {
+      type?: string
+      name?: string
+      children?: unknown[]
+      data?: string
+    }
     if (n.type === 'text') {
       out.push(n.data ?? '')
       return
@@ -83,7 +95,11 @@ export function convertHTMLToMarkdown(html: string): string {
   return turndown.turndown(html)
 }
 
-const convert = (content: string, contentType: string, format: Format): string => {
+const convert = (
+  content: string,
+  contentType: string,
+  format: Format,
+): string => {
   if (!contentType.includes('text/html')) return content
   if (format === 'markdown') return convertHTMLToMarkdown(content)
   if (format === 'text') return extractTextFromHTML(content)
@@ -91,7 +107,17 @@ const convert = (content: string, contentType: string, format: Format): string =
 }
 
 /** Fetch a single byte stream (bounded) then decode per format. */
-async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number, locale: string): Promise<{ url: string; contentType: string; format: Format; output: string }> {
+async function fetchUrl(
+  rawUrl: string,
+  format: Format,
+  timeoutSeconds: number,
+  locale: string,
+): Promise<{
+  url: string
+  contentType: string
+  format: Format
+  output: string
+}> {
   const url = new URL(rawUrl)
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error(tr(locale, 'fetchUrlScheme'))
@@ -101,7 +127,10 @@ async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number, 
   }
   const doFetch = async (ua: string) => {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(new Error('Request timed out')), timeoutSeconds * 1000)
+    const timer = setTimeout(
+      () => controller.abort(new Error('Request timed out')),
+      timeoutSeconds * 1000,
+    )
     try {
       const res = await fetch(url, {
         headers: {
@@ -121,7 +150,9 @@ async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number, 
       }
       const buf = Buffer.from(await res.arrayBuffer())
       if (buf.length > WEB_FETCH_MAX_BYTES) {
-        throw new Error(tr(locale, 'fetchTooLarge', { bytes: WEB_FETCH_MAX_BYTES }))
+        throw new Error(
+          tr(locale, 'fetchTooLarge', { bytes: WEB_FETCH_MAX_BYTES }),
+        )
       }
       return { contentType, buf }
     } finally {
@@ -133,7 +164,13 @@ async function fetchUrl(rawUrl: string, format: Format, timeoutSeconds: number, 
   try {
     fetched = await doFetch(WEB_FETCH_USER_AGENT)
   } catch (e) {
-    if (e && typeof e === 'object' && 'type' in e && (e as { type: string }).type === 'aborted') throw e
+    if (
+      e &&
+      typeof e === 'object' &&
+      'type' in e &&
+      (e as { type: string }).type === 'aborted'
+    )
+      throw e
     try {
       fetched = await doFetch('opencode')
     } catch (e2) {
@@ -155,5 +192,8 @@ export const webFetchExecute =
     const format = (args['format'] as Format) ?? 'markdown'
     const timeout = Number(args['timeout'] ?? 0)
     const out = await fetchUrl(rawUrl, format, timeout, locale)
-    return { content: out.output, data: { url: out.url, contentType: out.contentType, format: out.format } }
+    return {
+      content: out.output,
+      data: { url: out.url, contentType: out.contentType, format: out.format },
+    }
   }
