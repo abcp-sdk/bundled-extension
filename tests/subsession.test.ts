@@ -14,6 +14,7 @@ interface Sent {
   sessionName: string
   type: string
   payload: unknown
+  source: string
 }
 
 function fixture() {
@@ -91,8 +92,9 @@ function fixture() {
       sessionName: string,
       type: string,
       payload: unknown,
+      source = '',
     ) => {
-      sent.push({ tenant, sessionName, type, payload })
+      sent.push({ tenant, sessionName, type, payload, source })
     },
     // No agent-projected session locale by default => tools fall back to 'en'.
     getSessionVariable: async () => undefined,
@@ -153,7 +155,7 @@ describe('subsession-create', () => {
     expect(child['group']).toBe('parent')
   })
 
-  it('wakes the child with a user_prompt carrying the task + reply instruction', async () => {
+  it('wakes the child with a trigger carrying the task + reply instruction', async () => {
     seedParent(fx.db)
     await fx.tools['subsession-create']!(
       { prompt: 'analyze X', name: 'child-1' },
@@ -164,7 +166,8 @@ describe('subsession-create', () => {
     )
     expect(fx.sent).toHaveLength(1)
     expect(fx.sent[0]!.sessionName).toBe('child-1')
-    expect(fx.sent[0]!.type).toBe('user_prompt')
+    expect(fx.sent[0]!.type).toBe('trigger')
+    expect(fx.sent[0]!.source).toBe('session:parent')
     const text = String((fx.sent[0]!.payload as { text: string }).text)
     expect(text).toContain('analyze X')
     // The child is told how to return: mail-send to the parent.
@@ -242,7 +245,7 @@ describe('mail-send', () => {
   beforeEach(() => (fx = fixture()))
   afterEach(() => fx.db.close())
 
-  it('delivers a user_prompt to an existing session (any same-tenant session)', async () => {
+  it('delivers a trigger to an existing session (any same-tenant session)', async () => {
     seedParent(fx.db, 'child', 'parent')
     seedParent(fx.db, 'parent')
     const r = await fx.tools['mail-send']!(
@@ -257,7 +260,8 @@ describe('mail-send', () => {
     expect(fx.sent[0]).toMatchObject({
       tenant: 't',
       sessionName: 'parent',
-      type: 'user_prompt',
+      type: 'trigger',
+      source: 'session:child',
     })
     expect((fx.sent[0]!.payload as { text: string }).text).toBe('result: 42')
   })
@@ -304,7 +308,7 @@ describe('deleteSubsessions (cascade on parent delete)', () => {
     seedParent(fx.db, 'other')
     fx.db
       .prepare(
-        `INSERT INTO mailbox (id, tenant, session_name, msg_type) VALUES ('m1','t','c1','user_prompt')`,
+        `INSERT INTO mailbox (id, tenant, session_name, msg_type) VALUES ('m1','t','c1','trigger')`,
       )
       .run()
 

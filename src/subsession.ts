@@ -13,7 +13,7 @@
  *
  * Handoff is plain mailbox messaging (the same channel the HTTP prompt route
  * uses):
- *   - parent → child: `user_prompt` carrying the task (wakes the child).
+ *   - parent → child: `trigger` carrying the task (wakes the child).
  *   - child → parent: `mail-send` to the parent's name with the result
  *     (wakes the parent to continue its turn).
  *
@@ -166,9 +166,13 @@ export function subsessionExecutes(
     // the task itself and a completion instruction — all in the session's
     // own locale.
     const handoff = `${s.forkPreamble(sessionName)}\n\n${prompt}${s.handoff(sessionName)}`
-    await deps.publishMailbox(tenant, childName, 'user_prompt', {
-      text: handoff,
-    })
+    await deps.publishMailbox(
+      tenant,
+      childName,
+      'trigger',
+      { text: handoff },
+      `session:${sessionName}`,
+    )
 
     const desc = strArg(args, 'description').trim()
     return { content: s.started(childName, desc) }
@@ -190,9 +194,15 @@ export function subsessionExecutes(
     if (!(await sessionExists(tenant, to))) {
       return { content: s.errTargetMissing(to) }
     }
-    // A `user_prompt` message wakes the target and continues its turn (an
+    // A `trigger` message wakes the target and continues its turn (an
     // `event` would only fold into its context without triggering a turn).
-    await deps.publishMailbox(tenant, to, 'user_prompt', { text })
+    await deps.publishMailbox(
+      tenant,
+      to,
+      'trigger',
+      { text },
+      `session:${sessionName}`,
+    )
     return { content: s.delivered(to) }
   }
 

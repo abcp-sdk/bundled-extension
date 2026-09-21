@@ -114,16 +114,18 @@ export interface BundledDeps {
     rows: Array<{ content: string; status: string; priority: string }>,
   ): Promise<void>
   /**
-   * Publish a durable mailbox message to a session. `type` is one of
-   * `user_prompt` (triggers a turn), `event` (folded into context only) or
-   * `interrupt`. Used by the subsession-create / mail-send tools to hand work to
-   * another session and to wake a parent when a child finishes.
+   * Publish a durable mailbox message to a session. `type` is `trigger`
+   * (drives a turn), `event` (folded into context only) or `interrupt`.
+   * `source` records the ORIGIN (`session:{name}` for these tools) so the
+   * receiver can tell a hand-off from a human prompt. Used by the
+   * subsession-create / mail-send tools.
    */
   publishMailbox: (
     tenant: string,
     sessionName: string,
     type: string,
     payload: unknown,
+    source?: string,
   ) => Promise<void>
   /** Read a stored file blob (meta + bytes) by `file:<code>`, tenant-scoped. */
   blobGet: (
