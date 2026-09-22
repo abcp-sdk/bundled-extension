@@ -121,6 +121,37 @@ tools:
             zh: "文件编码（file: 之后的 16 字符部分）。"
       required: [code]
 
+  - name: file-read
+    description: >-
+      Read the TEXT content of a previously uploaded file referenced as file:<code>,
+      line-numbered, windowed by offset/limit. Only plain-text formats are supported
+      (text/*, markdown, json, csv, code, …); binary files and Office documents
+      (docx/xlsx/pptx) are rejected. Use file-info first to check the type.
+    descriptions:
+      zh: >-
+        读取以 file:<code> 引用的已上传文件的文本内容，带行号，用 offset/limit 分窗。仅支持纯文本格式
+        （text/*、markdown、json、csv、代码等）；二进制文件与 Office 文档（docx/xlsx/pptx）会被拒绝。先用
+        file-info 查看类型。
+    input_schema:
+      type: object
+      properties:
+        code:
+          type: string
+          description: "The file code (the 16-char segment after file:)."
+          descriptions:
+            zh: "文件编码（file: 之后的 16 字符部分）。"
+        offset:
+          type: integer
+          description: "Start line (0-based, default 0)."
+          descriptions:
+            zh: "起始行（从 0 开始，默认 0）。"
+        limit:
+          type: integer
+          description: "Maximum lines to return (default 200, max 1000)."
+          descriptions:
+            zh: "最多返回行数（默认 200，最大 1000）。"
+      required: [code]
+
   - name: image-read
     description: >-
       Understand a previously uploaded image referenced as file:<code> using a vision model.

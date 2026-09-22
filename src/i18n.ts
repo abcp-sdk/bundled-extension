@@ -136,6 +136,22 @@ export const CATALOG = {
     en: 'File {code}: {name} ({mime}, {bytes} bytes, sha256={sha256})',
     zh: '文件 {code}：{name}（{mime}，{bytes} 字节，sha256={sha256}）',
   },
+  fileNotText: {
+    en: 'file {code} is not readable text ({mime}) — only plain-text formats are supported; Office documents (docx/xlsx/pptx) and binary files are not',
+    zh: '文件 {code} 不是可读文本（{mime}）—— 仅支持纯文本格式；不支持 Office 文档（docx/xlsx/pptx）与二进制文件',
+  },
+  fileReadEmpty: {
+    en: '(empty file)',
+    zh: '（空文件）',
+  },
+  fileReadShowingLines: {
+    en: '\n(showing lines {start}-{end} of {total}{more})',
+    zh: '\n（显示第 {start}-{end} 行，共 {total} 行{more}）',
+  },
+  fileReadMore: {
+    en: '; more lines available',
+    zh: '；还有更多行',
+  },
 
   // ---- web fetch / search ----
   fetchUrlScheme: {

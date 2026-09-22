@@ -16,6 +16,34 @@ function numArg(m: Record<string, unknown>, k: string, def: number): number {
   return numArgRaw(m, k) ?? def
 }
 
+/**
+ * True for mime types `file-read` treats as readable plain text: anything
+ * `text/*`, plus the common JSON/XML/YAML/TOML/CSV shapes. Office documents
+ * (docx/xlsx/pptx) and other binaries are deliberately excluded.
+ */
+function isReadableTextMime(mime: string): boolean {
+  const m = mime.toLowerCase()
+  if (m.startsWith('text/')) return true
+  return (
+    m === 'application/json' ||
+    m === 'application/xml' ||
+    m === 'application/x-yaml' ||
+    m === 'application/yaml' ||
+    m === 'application/toml' ||
+    m === 'application/javascript' ||
+    m === 'application/typescript' ||
+    m === 'application/x-sh'
+  )
+}
+
+/** Split text into lines, tolerating CRLF/CR and dropping a trailing newline. */
+function splitLines(text: string): string[] {
+  const normalized = text.replace(/\r\n?/g, '\n')
+  const lines = normalized.split('\n')
+  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+  return lines
+}
+
 /** The bundled extension's `todos` table, created idempotently in the agent DB. */
 
 /** Build the memory/history/file/vision execute handlers bound to [deps]. */
@@ -357,6 +385,47 @@ export function memoryExecutes(
         sha256: String(meta['sha256'] ?? ''),
       })
       return { content, data: { meta } }
+    },
+    'file-read': async (args, _callId, sessionName, _signal, tenant = '') => {
+      const locale = await localeOf(deps, tenant, sessionName ?? '')
+      const code = strArg(args, 'code')
+      if (code === '') toolError(tr(locale, 'codeRequired'))
+      const blob = await deps.blobGet(code, tenant)
+      const mime = String(blob.meta['mime'] ?? '')
+      if (!isReadableTextMime(mime)) {
+        toolError(tr(locale, 'fileNotText', { code, mime: mime || 'unknown' }))
+      }
+      const offset = Math.max(0, Math.floor(numArg(args, 'offset', 0)))
+      const limit = Math.min(
+        Math.max(1, Math.floor(numArg(args, 'limit', 200))),
+        1000,
+      )
+      const all = splitLines(new TextDecoder('utf-8').decode(blob.data))
+      const total = all.length
+      const start = Math.min(offset, total)
+      const lines = all.slice(start, start + limit)
+      const end = start + lines.length
+      const width = String(Math.max(end, 1)).length
+      let content =
+        lines.length === 0
+          ? tr(locale, 'fileReadEmpty')
+          : lines
+              .map(
+                (l, i) => `${String(start + i + 1).padStart(width, ' ')}  ${l}`,
+              )
+              .join('\n')
+      if (end < total) {
+        content += tr(locale, 'fileReadShowingLines', {
+          start: start + 1,
+          end,
+          total,
+          more: tr(locale, 'fileReadMore'),
+        })
+      }
+      return {
+        content,
+        data: { code, mime, total_lines: total, start, shown: lines.length },
+      }
     },
     'image-read': async (args, _callId, sessionName, _signal, tenant = '') => {
       const locale = await localeOf(deps, tenant, sessionName ?? '')
