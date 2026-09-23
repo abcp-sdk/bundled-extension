@@ -268,6 +268,7 @@ export function memoryExecutes(
           (await deps.resolveConfig('model.text', undefined, tenant)) ?? '',
         ),
         code,
+        name: String(meta['name'] ?? ''),
         mime,
         size: Number(meta['size'] ?? 0),
       },
@@ -424,7 +425,14 @@ export function memoryExecutes(
       }
       return {
         content,
-        data: { code, mime, total_lines: total, start, shown: lines.length },
+        data: {
+          code,
+          name: String(blob.meta['name'] ?? ''),
+          mime,
+          total_lines: total,
+          start,
+          shown: lines.length,
+        },
       }
     },
     'image-read': async (args, _callId, sessionName, _signal, tenant = '') => {

@@ -14,7 +14,7 @@ function fixture(files: Record<string, { mime: string; data: Uint8Array }>) {
     blobGet: async (code: string) => {
       const f = files[code]
       if (!f) throw new Error(`no such file: ${code}`)
-      return { meta: { mime: f.mime }, data: f.data }
+      return { meta: { mime: f.mime, name: `${code}.txt` }, data: f.data }
     },
     getSessionVariable: async () => undefined,
     resolveConfig: async () => undefined,
@@ -39,7 +39,12 @@ describe('file-read', () => {
       't',
     )
     expect(r?.content).toBe('1  alpha\n2  beta\n3  gamma')
-    expect(r?.data).toMatchObject({ total_lines: 3, start: 0, shown: 3 })
+    expect(r?.data).toMatchObject({
+      total_lines: 3,
+      start: 0,
+      shown: 3,
+      name: 'c1.txt',
+    })
   })
 
   it('windows by offset/limit and notes the range', async () => {

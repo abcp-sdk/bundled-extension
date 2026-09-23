@@ -175,7 +175,10 @@ export function subsessionExecutes(
     )
 
     const desc = strArg(args, 'description').trim()
-    return { content: s.started(childName, desc) }
+    return {
+      content: s.started(childName, desc),
+      data: { name: childName, description: desc },
+    }
   }
 
   const sessionSend: ToolSpec['execute'] = async (
@@ -203,7 +206,7 @@ export function subsessionExecutes(
       { text },
       `session:${sessionName}`,
     )
-    return { content: s.delivered(to) }
+    return { content: s.delivered(to), data: { to, text } }
   }
 
   return {

@@ -141,6 +141,8 @@ describe('subsession-create', () => {
       T,
     )
     expect(r?.content).toContain('child-1')
+    // Structured metadata for the client card.
+    expect(r?.data).toMatchObject({ name: 'child-1' })
     const child = rowOf(fx.db, 'child-1')
     // Inherited verbatim.
     expect(child['model']).toBe('mock/m')
@@ -256,6 +258,8 @@ describe('mail-send', () => {
       T,
     )
     expect(String(r?.content)).toContain('delivered')
+    // Structured metadata for the client card.
+    expect(r?.data).toMatchObject({ to: 'parent', text: 'result: 42' })
     expect(fx.sent).toHaveLength(1)
     expect(fx.sent[0]).toMatchObject({
       tenant: 't',

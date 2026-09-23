@@ -55,6 +55,7 @@ export const audioTranscribeExecute =
       content: text,
       data: {
         code,
+        name: String(meta['name'] ?? ''),
         mime,
         size: Number(meta['size'] ?? 0),
         model: modelId,

@@ -25,6 +25,14 @@ interface BraveWebResult {
   title_language?: string
 }
 
+/** One structured search hit carried in the tool result `data`. */
+export interface BraveResult {
+  title: string
+  url: string
+  description: string
+  age?: string
+}
+
 interface BraveResponse {
   web?: { results?: BraveWebResult[] }
 }
@@ -33,6 +41,19 @@ function assertApiKey(apiKey: string, locale: string): void {
   if (!apiKey || apiKey.trim() === '') {
     throw new Error(tr(locale, 'braveKeyMissing'))
   }
+}
+
+/** Normalize the API hits to the structured shape exposed in `data`. */
+function toResults(results: BraveWebResult[]): BraveResult[] {
+  return results.map(r => {
+    const out: BraveResult = {
+      title: r.title ?? '',
+      url: r.url ?? '',
+      description: r.description ?? '',
+    }
+    if (r.age !== undefined && r.age !== '') out.age = r.age
+    return out
+  })
 }
 
 function renderResults(
@@ -56,7 +77,7 @@ async function callBrave(
   query: string,
   count: number,
   locale: string,
-): Promise<string> {
+): Promise<{ text: string; results: BraveResult[] }> {
   assertApiKey(apiKey, locale)
   const url = new URL(BRAVE_API_BASE)
   url.searchParams.set('q', query)
@@ -96,11 +117,11 @@ async function callBrave(
       )
     }
     const body = JSON.parse(buf.toString('utf8')) as BraveResponse
-    return renderResults(
-      query,
-      body.web?.results ?? [],
-      body.web?.results?.length ?? 0,
-    )
+    const raw = body.web?.results ?? []
+    return {
+      text: renderResults(query, raw, raw.length),
+      results: toResults(raw),
+    }
   } catch (e) {
     if (e instanceof Error && e.message === 'Request timed out') throw e
     throw new Error(tr(locale, 'braveFailed', { detail: String(e) }))
@@ -121,7 +142,9 @@ export function braveSearchExecute(deps: BundledDeps): ToolSpec['execute'] {
     const apiKey = String(
       (await deps.resolveConfig('brave_api_key', sessionName, tenant)) ?? '',
     )
-    const text = await callBrave(apiKey, query, count, locale)
-    return { content: text, data: { provider: 'brave', query } }
+    const { text, results } = await callBrave(apiKey, query, count, locale)
+    // Structured hits ride along in `data` so the client card renders links
+    // instead of re-parsing the text.
+    return { content: text, data: { provider: 'brave', query, results } }
   }
 }
