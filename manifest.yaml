@@ -39,6 +39,26 @@ tools:
             required: [content, status, priority]
       required: [todos]
 
+  - name: time-wait
+    description: >-
+      Wait for a fixed number of seconds (blocking this turn) before continuing.
+      Use it to space out steps or let an external process make progress. The
+      wait is capped at 590 seconds and is cancelled immediately if the user
+      interrupts the turn. Returns once the wait elapses.
+    descriptions:
+      zh: >-
+        等待固定的秒数（阻塞本回合）后再继续。用于拉开步骤间隔，或给外部进程留出推进时间。
+        等待上限为 590 秒；用户中断本回合时会立即取消。等待结束后返回。
+    input_schema:
+      type: object
+      properties:
+        seconds:
+          type: integer
+          description: Seconds to wait (1..590; values above 590 are clamped).
+          descriptions:
+            zh: 等待的秒数（1..590；超过 590 会被夹取到 590）。
+      required: [seconds]
+
   - name: history-search
     description: >-
       Search this session's chat history by keyword (case-insensitive substring over

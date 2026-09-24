@@ -153,6 +153,16 @@ export const CATALOG = {
     zh: '；还有更多行',
   },
 
+  // ---- time-wait ----
+  timeWaited: {
+    en: 'Waited {n} second(s).',
+    zh: '已等待 {n} 秒。',
+  },
+  timeWaitInterrupted: {
+    en: 'time-wait was interrupted before it finished',
+    zh: 'time-wait 在结束前被中断',
+  },
+
   // ---- web fetch / search ----
   fetchUrlScheme: {
     en: 'URL must use http:// or https://',

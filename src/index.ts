@@ -16,6 +16,7 @@ import { imageGenExecutes } from './image.js'
 import { memoryExecutes } from './memory.js'
 import { speechExecutes } from './speech.js'
 import { deleteSubsessions, subsessionExecutes } from './subsession.js'
+import { timeWaitExecutes } from './time-wait.js'
 import { webFetchExecute } from './webfetch.js'
 
 export * from './asr.js'
@@ -51,6 +52,12 @@ export function createBundledConfig(deps: BundledDeps): ExtensionConfig {
     ),
     ...Object.fromEntries(
       Object.entries(subsessionExecutes(deps)).map(([k, v]) => [
+        k,
+        { execute: v },
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(timeWaitExecutes(deps)).map(([k, v]) => [
         k,
         { execute: v },
       ]),
