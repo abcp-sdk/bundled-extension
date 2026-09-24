@@ -172,6 +172,11 @@ describe('subsession-create', () => {
     expect(fx.sent[0]!.source).toBe('session:parent')
     const text = String((fx.sent[0]!.payload as { text: string }).text)
     expect(text).toContain('analyze X')
+    // The preamble must FORBID executing the parent's own instructions (the
+    // bug: a child inherited "start 10 subsessions" and tried to do all 10).
+    // The fixture falls back to English.
+    expect(text).toContain('MUST NOT carry out')
+    expect(text).toContain('MUST NOT create subsessions')
     // The child is told how to return: mail-send to the parent.
     expect(text).toContain('mail-send')
     expect(text).toContain('parent')
