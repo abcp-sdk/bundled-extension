@@ -1,6 +1,6 @@
 import type { LanguageModel } from 'ai'
 
-/** One entry of a bounded chain walk (depth 0 = the tip). */
+/** One entry of a chain walk (depth 0 = the tip). */
 export interface ChainEntry {
   id: string
   role: string
@@ -97,7 +97,12 @@ export interface BundledDeps {
   deleteSessionRow(tenant: string, sid: string): Promise<void>
   /** Remove a session's queued mailbox rows. */
   deleteSessionMailbox(tenant: string, sid: string): Promise<void>
-  /** Bounded chain walk from a tip, oldest-first with depth 0 at the tip. */
+  /**
+   * Chain walk from a tip, oldest-first with depth 0 at the tip. `limit`
+   * caps the number of entries (the walk depth); `limit <= 0` means NO cap
+   * (the whole chain). The history tools pass 0 to traverse the full chain
+   * and slice it themselves, so their window is never silently truncated.
+   */
   messageChain(
     tenant: string,
     tip: string,

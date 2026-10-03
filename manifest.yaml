@@ -63,12 +63,17 @@ tools:
     description: >-
       Search this session's chat history by keyword (case-insensitive substring over
       parts(type=text) text, tool names and change ids), optionally constrained to a time
-      range [from, to] (YYYY-MM-DD HH:MM:SS). Returns messages newest-first with their
-      role, depth (0 = newest), tool name and workspace change id.
+      range [from, to] (YYYY-MM-DD HH:MM:SS). Searches the FULL chain (no depth cap),
+      newest-first, and returns one page [offset, offset+limit) with role, depth (0 =
+      newest), tool name, workspace change id and the message content in full (a single
+      message is never truncated). Each entry's `data.entries[].content` is complete;
+      `max_total_chars` bounds the rendered text only.
     descriptions:
       zh: >-
         按关键词搜索本会话的聊天历史（对 parts(type=text) 文本、工具名、change id 做大小写不敏感的子串匹配），可选时间范围
-        [from, to]（YYYY-MM-DD HH:MM:SS）。按最新在前返回消息及其角色、深度（0=最新）、工具名与工作区 change id。
+        [from, to]（YYYY-MM-DD HH:MM:SS）。搜索整条链（无深度上限），按最新在前分页返回
+        [offset, offset+limit) 一页，含角色、深度（0=最新）、工具名、工作区 change id 与完整消息内容（单条永不截断）。
+        每条 `data.entries[].content` 均为全量；`max_total_chars` 仅约束 text 渲染长度。
     input_schema:
       type: object
       properties:
@@ -87,23 +92,48 @@ tools:
           description: "Inclusive upper time bound (YYYY-MM-DD HH:MM:SS)."
           descriptions:
             zh: "含端点的上界时间（YYYY-MM-DD HH:MM:SS）。"
+        offset:
+          type: integer
+          description: >-
+            Pagination offset into the match list (default 0). Pairs with `limit`;
+            the response reports `has_more` and `next_offset`.
+          descriptions:
+            zh: 匹配结果的分页偏移（默认 0）。与 `limit` 搭配；返回 `has_more` 与 `next_offset`。
         limit:
           type: integer
-          description: Maximum number of messages to return (default 50).
+          description: >-
+            Page size: maximum number of matched messages to return (default 50;
+            0 = no page cap).
           descriptions:
-            zh: 最多返回的消息数（默认 50）。
+            zh: 页大小：最多返回的匹配消息数（默认 50；0 = 不分页）。
+        max_total_chars:
+          type: integer
+          description: >-
+            Total budget for the rendered text (default 100000; 0 = unlimited).
+            Entries accumulate (meta + full content); a single message is NEVER
+            truncated. When adding the next entry would exceed the budget, that entry
+            is still emitted in full and the list then stops (the total may slightly
+            exceed the budget). `data.entries[].content` is always the full content.
+          descriptions:
+            zh: >-
+              text 渲染的总字符预算（默认 100000；0 = 不限）。逐条累加（元信息 + 完整 content），
+              单条永不截断；加上下一条会超预算时，仍完整输出该条并停止（总量可略超预算）。
+              `data.entries[].content` 始终为完整内容。
       required: [query]
 
   - name: history-range
     description: >-
       Read this session's chat history by position (depth) window. depth 0 = the newest
       message; positive numbers go back in time; negative numbers count from the newest side
-      (-1 = newest). Returns [depth_from, depth_to) oldest-first with role, content, tool
-      name and change id.
+      (-1 = newest). Traverses the FULL chain (the window depth is never capped by `limit`)
+      and returns [depth_from, depth_to) oldest-first with role, content, tool name and
+      change id. `limit` caps only the number of returned messages (0 = no cap), and
+      `max_total_chars` bounds the rendered text.
     descriptions:
       zh: >-
         按位置（深度）窗口读取本会话的聊天历史。depth 0 = 最新消息；正数向更早回溯；负数从最新一侧计数（-1 = 最新）。返回
-        [depth_from, depth_to)，最旧在前，含角色、内容、工具名与 change id。
+        [depth_from, depth_to)，最旧在前，含角色、内容、工具名与 change id。遍历整条链（窗口深度不受 `limit` 限制）；
+        `limit` 仅限制返回条数（0 = 不限），`max_total_chars` 约束 text 渲染长度。
     input_schema:
       type: object
       properties:
@@ -119,9 +149,22 @@ tools:
             zh: 不含端点的深度上界。
         limit:
           type: integer
-          description: Maximum number of messages to return (default 200).
+          description: >-
+            Maximum number of messages to RETURN (default 200; 0 = no cap). Does not
+            bound the traversal depth.
           descriptions:
-            zh: 最多返回的消息数（默认 200）。
+            zh: 最多返回的消息数（默认 200；0 = 不限）。不限制遍历深度。
+        max_total_chars:
+          type: integer
+          description: >-
+            Total budget for the rendered text (default 100000; 0 = unlimited).
+            Entries accumulate (meta + full content); a single message is NEVER
+            truncated. When adding the next entry would exceed the budget, that entry
+            is still emitted in full and the list then stops.
+          descriptions:
+            zh: >-
+              text 渲染的总字符预算（默认 100000；0 = 不限）。逐条累加（元信息 + 完整 content），
+              单条永不截断；加上下一条会超预算时，仍完整输出该条并停止。
 
   - name: file-info
     description: >-
