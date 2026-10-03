@@ -135,13 +135,26 @@ export function memoryExecutes(
     return out
   }
 
+  /**
+   * Render history entries as text. Every message is emitted in FULL — a
+   * single entry is NEVER truncated. `maxTotalChars` is a total budget:
+   * entries accumulate (meta + full content chars) and, when adding the
+   * NEXT entry would exceed the budget, that entry is still emitted in full
+   * and the list then STOPS (so the last entry may push the total slightly
+   * past the budget). `maxTotalChars <= 0` disables the budget. At least one
+   * entry is always emitted. Returns the text and the count actually shown.
+   */
   const renderHistoryList = (
     locale: string,
     entries: Array<Record<string, unknown>>,
-  ): string => {
-    if (entries.length === 0) return 'history_search: no matching messages.'
+    maxTotalChars: number,
+  ): { content: string; shown: number } => {
+    if (entries.length === 0)
+      return { content: 'history_search: no matching messages.', shown: 0 }
     const label = locale.startsWith('zh') ? '历史' : 'history'
-    const lines: string[] = [`${label} ${entries.length} 条：`]
+    const itemLines: string[] = []
+    let total = 0
+    let shown = 0
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i]!
       const role = String(e['role'] ?? '?')
@@ -153,22 +166,40 @@ export function memoryExecutes(
       if (String(e['change_id'] ?? '') !== '')
         meta += ` change=${String(e['change_id'])}`
       const body = String(e['content'] ?? '')
-      const truncated = body.length > 200 ? `${body.slice(0, 200)}…` : body
-      lines.push(meta)
-      if (truncated !== '') lines.push(`    ${truncated}`)
+      const wouldExceed =
+        maxTotalChars > 0 && total + meta.length + body.length > maxTotalChars
+      // Never truncate a single message: emit this one in full, then stop if
+      // it is the entry that pushed us over the budget.
+      itemLines.push(meta)
+      if (body !== '') itemLines.push(`    ${body}`)
+      total += meta.length + body.length
+      shown++
+      if (wouldExceed) break
     }
-    return lines.join('\n')
+    const out = [`${label} ${shown} 条：`, ...itemLines]
+    if (shown < entries.length) {
+      out.push(
+        locale.startsWith('zh')
+          ? `（已达 ${maxTotalChars} 字符预算，仅显示前 ${shown} 条）`
+          : `(reached ${maxTotalChars}-char budget; showing first ${shown})`,
+      )
+    }
+    return { content: out.join('\n'), shown }
   }
 
+  /**
+   * Collect EVERY match over the FULL chain (no depth cap), newest-first.
+   * Pagination and the render budget are applied by the caller so that early
+   * history is searchable and paging is possible.
+   */
   const buildHistoryEntries = async (
     tenant: string,
     sid: string,
     query: string,
-    limit: number,
   ): Promise<Array<Record<string, unknown>>> => {
     const tip = await sessionTip(tenant, sid)
     if (tip === '') return []
-    const chain = await chainRaw(tenant, tip, 10000)
+    const chain = await chainRaw(tenant, tip, 0)
     const ids = chain.map(c => c.id)
     const textByMsg = await textPartsForMessages(tenant, ids, query)
     const toolByMsg = await partsForMessages(tenant, ids)
@@ -197,7 +228,6 @@ export function memoryExecutes(
         created_at: r.created,
         depth: r.depth,
       })
-      if (out.length >= limit) break
     }
     return out
   }
@@ -300,21 +330,39 @@ export function memoryExecutes(
       const query = strArg(args, 'query')
       const from = strArg(args, 'from')
       const to = strArg(args, 'to')
-      const limit = numArg(args, 'limit', 50)
-      const entries = await buildHistoryEntries(
-        tenant,
-        sessionName,
-        query,
-        limit,
+      const offset = Math.max(0, Math.floor(numArg(args, 'offset', 0)))
+      const limit = Math.max(0, Math.floor(numArg(args, 'limit', 50)))
+      const maxTotalChars = Math.max(
+        0,
+        Math.floor(numArg(args, 'max_total_chars', 100000)),
       )
-      const filtered = entries.filter(e => {
+      const all = await buildHistoryEntries(tenant, sessionName, query)
+      const filtered = all.filter(e => {
         if (from !== '' && String(e['created_at']) < from) return false
         if (to !== '' && String(e['created_at']) > to) return false
         return true
       })
+      const total = filtered.length
+      const page =
+        limit > 0
+          ? filtered.slice(offset, offset + limit)
+          : filtered.slice(offset)
       const locale = await localeOf(deps, tenant, sessionName)
-      const content = renderHistoryList(locale, filtered)
-      return { content, data: { count: filtered.length, entries } }
+      const rendered = renderHistoryList(locale, page, maxTotalChars)
+      const entries = page.slice(0, rendered.shown)
+      const consumed = offset + rendered.shown
+      const hasMore = consumed < total
+      return {
+        content: rendered.content,
+        data: {
+          count: entries.length,
+          total,
+          offset,
+          has_more: hasMore,
+          next_offset: hasMore ? consumed : null,
+          entries,
+        },
+      }
     },
     'history-range': async (
       args,
@@ -326,11 +374,17 @@ export function memoryExecutes(
       if (!sessionName) toolError('missing session context (session_name)')
       const from = numArg(args, 'from', 0)
       const to = numArg(args, 'to', 0)
-      const limit = numArg(args, 'limit', 200)
+      const limit = Math.max(0, Math.floor(numArg(args, 'limit', 200)))
+      const maxTotalChars = Math.max(
+        0,
+        Math.floor(numArg(args, 'max_total_chars', 100000)),
+      )
+      // Traverse the WHOLE chain (limit <= 0 = no depth cap); `limit` below is
+      // only the RETURN cap, so deep windows are never silently empty.
       const chain = await chainRaw(
         tenant,
         await sessionTip(tenant, sessionName),
-        limit,
+        0,
       )
       const total = chain.length
       const norm = (d: number): number => (d < 0 ? total + d : d)
@@ -338,18 +392,24 @@ export function memoryExecutes(
       let t = norm(to)
       if (f < 0) f = 0
       if (t > total) t = total
+      const locale = await localeOf(deps, tenant, sessionName)
       if (f >= t)
         return {
-          content: tr(
-            await localeOf(deps, tenant, sessionName),
-            'historyRangeEmpty',
-          ),
-          data: { count: 0 },
+          content: tr(locale, 'historyRangeEmpty'),
+          data: {
+            count: 0,
+            total,
+            offset: f,
+            has_more: false,
+            next_offset: null,
+          },
         }
-      const ids = chain.map(c => c.id)
+      let window = chain.slice(f, t)
+      if (limit > 0 && window.length > limit) window = window.slice(0, limit)
+      const ids = window.map(c => c.id)
       const textByMsg = await textPartsForMessages(tenant, ids, '')
       const toolByMsg = await partsForMessages(tenant, ids)
-      const entries = chain.slice(f, t).map(r => {
+      const built = window.map(r => {
         let toolName = ''
         let changeID = ''
         const parts = toolByMsg.get(r.id)
@@ -369,9 +429,21 @@ export function memoryExecutes(
           depth: r.depth,
         }
       })
-      const locale = await localeOf(deps, tenant, sessionName)
-      const content = renderHistoryList(locale, entries)
-      return { content, data: { count: entries.length, entries } }
+      const rendered = renderHistoryList(locale, built, maxTotalChars)
+      const entries = built.slice(0, rendered.shown)
+      const consumed = f + rendered.shown
+      const hasMore = consumed < t
+      return {
+        content: rendered.content,
+        data: {
+          count: entries.length,
+          total,
+          offset: f,
+          has_more: hasMore,
+          next_offset: hasMore ? consumed : null,
+          entries,
+        },
+      }
     },
     'file-info': async (args, _callId, sessionName, _signal, tenant = '') => {
       const locale = await localeOf(deps, tenant, sessionName ?? '')
